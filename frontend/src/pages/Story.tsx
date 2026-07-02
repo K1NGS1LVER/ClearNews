@@ -80,6 +80,28 @@ export default function Story() {
       </p>
 
       <div className="flex flex-col gap-4">
+        <Section title="Read the coverage">
+          <ul className="flex flex-col gap-2">
+            {arc.articles.map((a) => (
+              <li key={a.id} className="flex items-center gap-2 text-sm">
+                <BiasChip label={a.bias_label} />
+                <Link
+                  to={`/article/${a.id}`}
+                  className="min-w-0 flex-1 truncate hover:underline"
+                >
+                  {a.title ?? a.url}
+                </Link>
+                <span
+                  className="max-w-[40%] shrink-0 truncate text-right text-xs"
+                  style={{ color: "var(--ink-muted)" }}
+                >
+                  {a.outlet} · {a.published_at}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
         <Section title="Coverage volume (articles per day)">
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={arc.metrics}>
@@ -197,27 +219,6 @@ export default function Story() {
           </table>
         </Section>
 
-        <Section title="Articles">
-          <ul className="flex flex-col gap-2">
-            {arc.articles.map((a) => (
-              <li key={a.id} className="flex items-center gap-2 text-sm">
-                <BiasChip label={a.bias_label} />
-                <Link
-                  to={`/article/${a.id}`}
-                  className="min-w-0 flex-1 truncate hover:underline"
-                >
-                  {a.title ?? a.url}
-                </Link>
-                <span
-                  className="max-w-[40%] shrink-0 truncate text-right text-xs"
-                  style={{ color: "var(--ink-muted)" }}
-                >
-                  {a.outlet} · {a.published_at}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Section>
       </div>
     </div>
   );
