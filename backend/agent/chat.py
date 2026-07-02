@@ -32,6 +32,8 @@ Rules:
   unresolved.
 - If the tools return nothing relevant, say so plainly. Never invent
   articles, outlets, or citation ids.
+- Call ONLY the tools provided in this request. There is no open_file,
+  browser, or web search - article search tools are your only data access.
 - Keep answers compact and analytical."""
 
 
@@ -74,11 +76,7 @@ def _collect_sources(messages) -> list[dict]:
     return list(sources.values())
 
 
-async def stream_chat(messages: list[dict], story_id: int | None):
-    """Yield SSE-ready events: token deltas, then citations."""
-    agent = build_agent(story_id)
-    state = {"messages": [(m["role"], m["content"]) for m in messages]}
-
+async def _stream_once(agent, state):
     final_messages = []
     async for event, chunk in agent.astream(
         state, stream_mode=["messages", "values"]
@@ -91,6 +89,39 @@ async def stream_chat(messages: list[dict], story_id: int | None):
             final_messages = chunk["messages"]
 
     yield {"type": "sources", "sources": _collect_sources(final_messages)}
+
+
+async def stream_chat(messages: list[dict], story_id: int | None, retries: int = 1):
+    """Yield SSE-ready events: token deltas, then citations.
+
+    The model occasionally hallucinates a tool name that is not in the
+    request ("attempted to call tool ... which was not in request.tools"
+    from Groq). That is stochastic, so retry once with a clean stream;
+    if it happens again, end the stream with an error event instead of
+    blowing up the HTTP response mid-SSE.
+    """
+    from groq import APIError
+
+    agent = build_agent(story_id)
+    state = {"messages": [(m["role"], m["content"]) for m in messages]}
+
+    for attempt in range(retries + 1):
+        emitted = False
+        try:
+            async for event in _stream_once(agent, state):
+                # after tokens reached the client a retry would duplicate
+                # the answer, so only retry on failures before first output
+                emitted = emitted or event["type"] == "token"
+                yield event
+            return
+        except APIError as exc:
+            if emitted or attempt == retries:
+                yield {
+                    "type": "error",
+                    "message": "The model produced an invalid tool call. Please try again.",
+                }
+                print(f"chat agent APIError (attempt {attempt + 1}): {exc}")
+                return
 
 
 def suggest_questions(context: str) -> list[str]:

@@ -69,6 +69,12 @@ export default function ChatPanel({ storyId }: { storyId?: number }) {
               ...ms.slice(0, -1),
               { role: "assistant", content: answer },
             ]);
+          } else if (data.type === "error") {
+            answer = answer ? `${answer}\n\n${data.message}` : data.message;
+            setMessages((ms) => [
+              ...ms.slice(0, -1),
+              { role: "assistant", content: answer },
+            ]);
           } else if (data.type === "sources") {
             setMessages((ms) => [
               ...ms.slice(0, -1),
