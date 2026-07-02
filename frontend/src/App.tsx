@@ -3,6 +3,7 @@ import Analytics from "./pages/Analytics";
 import Article from "./pages/Article";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
+import Latest from "./pages/Latest";
 import Search from "./pages/Search";
 import Story from "./pages/Story";
 
@@ -22,7 +23,10 @@ export default function App() {
           </span>
           <nav className="ml-auto flex gap-4 text-sm">
             <NavLink to="/" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
-              Feed
+              Stories
+            </NavLink>
+            <NavLink to="/latest" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
+              Latest
             </NavLink>
             <NavLink to="/search" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
               Search
@@ -40,6 +44,7 @@ export default function App() {
         <Route path="/" element={<Feed />} />
         <Route path="/story/:id" element={<Story />} />
         <Route path="/article/:id" element={<Article />} />
+        <Route path="/latest" element={<Latest />} />
         <Route path="/search" element={<Search />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/chat" element={<Chat />} />

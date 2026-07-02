@@ -198,6 +198,22 @@ def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
     return [_article_out(a) for a in articles]
 
 
+@app.get("/api/articles", response_model=list[ArticleOut])
+def latest_articles(limit: int = 50, db: Session = Depends(get_db)):
+    """Newest articles with titles, for the Latest reading feed."""
+    articles = (
+        db.execute(
+            select(Article)
+            .where(Article.title.isnot(None))
+            .order_by(Article.published_at.desc(), Article.id.desc())
+            .limit(min(limit, 200))
+        )
+        .scalars()
+        .all()
+    )
+    return [_article_out(a) for a in articles]
+
+
 class ArticleDetail(ArticleOut):
     content: str | None
     story_id: int | None
