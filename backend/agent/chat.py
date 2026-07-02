@@ -17,7 +17,7 @@ from langgraph.prebuilt import create_react_agent
 
 from agent.tools import get_story_arc, list_stories, make_search_story, search_corpus
 
-MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 SYSTEM = """You are the ClearNews research assistant. You answer questions
 about news stories using ONLY what your tools return: article search,

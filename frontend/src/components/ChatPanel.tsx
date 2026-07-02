@@ -112,7 +112,9 @@ export default function ChatPanel({ storyId }: { storyId?: number }) {
                 color: m.role === "user" ? "#fff" : "var(--ink)",
               }}
             >
-              {m.content || (busy && i === messages.length - 1 ? "…" : "")}
+              {/* some models emit 【id】instead of [id] */}
+              {m.content.replace(/【(\d+)】/g, "[$1]") ||
+                (busy && i === messages.length - 1 ? "…" : "")}
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {m.sources.map((s) => (
