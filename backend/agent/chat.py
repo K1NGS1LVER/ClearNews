@@ -116,10 +116,14 @@ async def stream_chat(messages: list[dict], story_id: int | None, retries: int =
             return
         except APIError as exc:
             if emitted or attempt == retries:
-                yield {
-                    "type": "error",
-                    "message": "The model produced an invalid tool call. Please try again.",
-                }
+                if "rate_limit" in str(exc) or "too large" in str(exc).lower():
+                    message = (
+                        "Hit the free-tier rate limit on the model provider. "
+                        "Wait a minute and try again."
+                    )
+                else:
+                    message = "The model produced an invalid tool call. Please try again."
+                yield {"type": "error", "message": message}
                 print(f"chat agent APIError (attempt {attempt + 1}): {exc}")
                 return
 

@@ -5,7 +5,7 @@ layer can build one citation map from whatever the agent retrieved.
 """
 
 from langchain_core.tools import tool
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import SessionLocal
 from app.models import Article, Story
@@ -14,6 +14,7 @@ from app.models import Article, Story
 def _source(a: Article) -> dict:
     return {
         "article_id": a.id,
+        "story_id": a.story_id,
         "title": a.title,
         "url": a.url,
         "outlet": a.outlet.domain,
@@ -93,17 +94,31 @@ def get_story_arc(story_id: int) -> dict:
 
 
 @tool
-def list_stories() -> list[dict]:
-    """List all tracked stories with id, title, status and article count.
-    Use to find a story id before calling get_story_arc."""
+def list_stories(limit: int = 20) -> list[dict]:
+    """List the biggest tracked stories (by coverage volume) with id, title,
+    status, category and article count. Use to find a story id before calling
+    get_story_arc. For a specific topic, prefer search_corpus - its results
+    include each article's story_id."""
+    # capped: dumping every story once blew Groq's per-request token limit
+    limit = min(limit, 30)
     with SessionLocal() as session:
-        stories = session.execute(select(Story)).scalars().all()
+        rows = session.execute(
+            select(
+                Story.id, Story.title, Story.status, Story.category,
+                func.count(Article.id).label("n"),
+            )
+            .join(Article, Article.story_id == Story.id)
+            .group_by(Story.id)
+            .order_by(func.count(Article.id).desc())
+            .limit(limit)
+        ).all()
         return [
             {
-                "story_id": s.id,
-                "title": s.title,
-                "status": s.status,
-                "articles": len(s.articles),
+                "story_id": sid,
+                "title": title,
+                "status": status,
+                "category": category,
+                "articles": n,
             }
-            for s in stories
+            for sid, title, status, category, n in rows
         ]
