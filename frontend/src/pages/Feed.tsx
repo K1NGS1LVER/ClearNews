@@ -57,7 +57,7 @@ export default function Feed() {
           <Link
             key={s.id}
             to={`/story/${s.id}`}
-            className="block rounded-lg border px-4 py-3 transition-shadow hover:shadow-md"
+            className="block rounded-lg border px-5 py-4 transition-shadow hover:shadow-md"
             style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
           >
             <div className="flex items-start justify-between gap-4">
@@ -77,7 +77,7 @@ export default function Feed() {
                     right={s.bias_right_share}
                   />
                 </div>
-                <h2 className="truncate font-semibold">{s.title}</h2>
+                <h2 className="mt-1 truncate text-lg font-semibold">{s.title}</h2>
               </div>
               <Sparkline counts={s.daily_counts} />
             </div>
