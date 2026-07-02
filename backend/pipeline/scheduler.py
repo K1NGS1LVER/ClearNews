@@ -35,7 +35,25 @@ def nightly() -> None:
         subprocess.run([sys.executable, "-m", "pipeline.predict", cmd], check=False)
 
 
+def check_single_openmp() -> None:
+    """Refuse to run with multiple OpenMP runtimes; that segfaults eventually.
+
+    torch and sklearn wheels each bundle a libomp.dylib; `uv sync` restores
+    them. scripts/unify_libomp.py symlinks them to one file.
+    """
+    from pathlib import Path
+
+    site = Path(__file__).parent.parent / ".venv/lib/python3.12/site-packages"
+    inodes = {p.stat().st_ino for p in site.rglob("libomp.dylib")}
+    if len(inodes) > 1:
+        raise SystemExit(
+            f"{len(inodes)} distinct OpenMP runtimes in the venv - this process "
+            "will eventually segfault. Run: uv run python scripts/unify_libomp.py"
+        )
+
+
 def main() -> None:
+    check_single_openmp()
     scheduler = BlockingScheduler()
     scheduler.add_job(ingest_latest, "interval", minutes=15)
     scheduler.add_job(hourly, "interval", hours=1)

@@ -4,6 +4,7 @@ Run: uv run uvicorn app.main:app --reload
 """
 
 import json
+from contextlib import asynccontextmanager
 from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -15,7 +16,17 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import Article, Outlet, Story
 
-app = FastAPI(title="ClearNews API")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # this process loads torch (search, agent) and sklearn (drift PCA);
+    # two bundled OpenMP runtimes would segfault it under load
+    from pipeline.scheduler import check_single_openmp
+
+    check_single_openmp()
+    yield
+
+
+app = FastAPI(title="ClearNews API", lifespan=lifespan)
 
 
 def get_db():

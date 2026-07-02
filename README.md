@@ -24,6 +24,9 @@ createdb clearnews
 cd backend
 cp .env.example .env          # add your GROQ_API_KEY for chat/summaries
 uv sync
+uv run python scripts/unify_libomp.py  # REQUIRED after every uv sync (macOS):
+                                       # torch + sklearn each bundle an OpenMP
+                                       # runtime; two in one process segfault
 uv run python -m app.init_db
 
 # data (each step is idempotent)
