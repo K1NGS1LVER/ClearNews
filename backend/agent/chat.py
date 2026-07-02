@@ -19,6 +19,20 @@ from agent.tools import get_story_arc, list_stories, make_search_story, search_c
 
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
+# Cap the ReAct tool loop. When retrieval turns up nothing on-topic, the model
+# keeps re-searching instead of answering; without a cap it runs to LangGraph's
+# default of 25 super-steps and raises GraphRecursionError. ~6 tool rounds is
+# plenty for legitimate multi-hop questions (real ones answer in 2).
+RECURSION_LIMIT = int(os.getenv("CHAT_RECURSION_LIMIT", "12"))
+
+# Shown whenever the agent finishes (or gives up) without producing any answer
+# text — the two no-match failure modes: a runaway loop hitting the recursion
+# cap, or a completion whose final message is empty.
+NO_COVERAGE_MESSAGE = (
+    "I couldn't find enough relevant coverage to answer that. "
+    "Try rephrasing, or ask about a story from the feed."
+)
+
 SYSTEM = """You are the ClearNews research assistant. You answer questions
 about news stories using ONLY what your tools return: article search,
 story lifecycle data (coverage volume, sentiment, narrative drift, and
@@ -79,7 +93,7 @@ def _collect_sources(messages) -> list[dict]:
 async def _stream_once(agent, state):
     final_messages = []
     async for event, chunk in agent.astream(
-        state, stream_mode=["messages", "values"]
+        state, {"recursion_limit": RECURSION_LIMIT}, stream_mode=["messages", "values"]
     ):
         if event == "messages":
             msg, _meta = chunk
@@ -99,8 +113,14 @@ async def stream_chat(messages: list[dict], story_id: int | None, retries: int =
     from Groq). That is stochastic, so retry once with a clean stream;
     if it happens again, end the stream with an error event instead of
     blowing up the HTTP response mid-SSE.
+
+    Separately, a query with no on-topic coverage sends the model into a
+    runaway search loop; RECURSION_LIMIT turns that into GraphRecursionError,
+    which we surface as a plain "nothing relevant" message rather than letting
+    the SSE stream hang and die.
     """
     from groq import APIError
+    from langgraph.errors import GraphRecursionError
 
     agent = build_agent(story_id)
     state = {"messages": [(m["role"], m["content"]) for m in messages]}
@@ -113,6 +133,14 @@ async def stream_chat(messages: list[dict], story_id: int | None, retries: int =
                 # the answer, so only retry on failures before first output
                 emitted = emitted or event["type"] == "token"
                 yield event
+            # the model can also stop with an empty final message (no tokens,
+            # just tool calls) — same no-answer outcome as a runaway loop.
+            if not emitted:
+                yield {"type": "error", "message": NO_COVERAGE_MESSAGE}
+            return
+        except GraphRecursionError:
+            print("chat agent hit recursion limit (runaway tool loop)")
+            yield {"type": "error", "message": NO_COVERAGE_MESSAGE}
             return
         except APIError as exc:
             if emitted or attempt == retries:
