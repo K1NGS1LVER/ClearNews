@@ -37,8 +37,8 @@ uv run python -m pipeline.metrics     # daily metrics, drift, status
 uv run python -m pipeline.scheduler   # or: continuous 15-min ingestion
 
 # run
-uv run uvicorn app.main:app --reload  # API on :8000
-cd ../frontend && pnpm install && pnpm dev  # UI on :5173 (proxies /api)
+cd ../frontend && pnpm install && cd ..
+./dev.sh   # starts API :8000 and UI :5173 together, Ctrl-C stops both
 
 # tests
 cd backend && uv run pytest

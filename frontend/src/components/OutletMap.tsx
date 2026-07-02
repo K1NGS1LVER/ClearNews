@@ -61,7 +61,8 @@ export default function OutletMap() {
         {labeled.map((o) => (
           <text
             key={o.domain}
-            x={sx(o.x)}
+            // keep long domains inside the svg instead of clipping at the edge
+            x={Math.min(Math.max(sx(o.x), 70), W - 70)}
             y={sy(o.y) - sr(o.articles) - 3}
             fontSize={10}
             textAnchor="middle"

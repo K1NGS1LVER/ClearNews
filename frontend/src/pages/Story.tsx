@@ -42,6 +42,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/** Time-series charts are noise below two days of data - show why instead. */
+function NeedsMoreDays() {
+  return (
+    <p className="py-6 text-center text-sm" style={{ color: "var(--ink-muted)" }}>
+      Coverage spans a single day so far. This chart appears once the story has
+      2+ days of history.
+    </p>
+  );
+}
+
 export default function Story() {
   const id = Number(useParams().id);
   const { data: arc } = useQuery({ queryKey: ["arc", id], queryFn: () => fetchArc(id) });
@@ -83,20 +93,24 @@ export default function Story() {
         </Section>
 
         <Section title="Coverage lean over time (share of articles)">
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={biasData} stackOffset="expand">
-              {grid}
-              <XAxis dataKey="day" {...axis} />
-              <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} {...axis} width={36} />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v) => `${Math.round(Number(v) * 100)}%`}
-              />
-              <Area dataKey="left" name="Left" stackId="1" stroke="none" fill="var(--bias-left)" />
-              <Area dataKey="center" name="Center" stackId="1" stroke="none" fill="var(--bias-center)" />
-              <Area dataKey="right" name="Right" stackId="1" stroke="none" fill="var(--bias-right)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {biasData.length < 2 ? (
+            <NeedsMoreDays />
+          ) : (
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={biasData} stackOffset="expand">
+                {grid}
+                <XAxis dataKey="day" {...axis} />
+                <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} {...axis} width={36} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v) => `${Math.round(Number(v) * 100)}%`}
+                />
+                <Area dataKey="left" name="Left" stackId="1" stroke="none" fill="var(--bias-left)" />
+                <Area dataKey="center" name="Center" stackId="1" stroke="none" fill="var(--bias-center)" />
+                <Area dataKey="right" name="Right" stackId="1" stroke="none" fill="var(--bias-right)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
           <BiasBar
             left={average(arc.metrics.map((m) => m.bias_left_share))}
             center={average(arc.metrics.map((m) => m.bias_center_share))}
@@ -106,40 +120,48 @@ export default function Story() {
         </Section>
 
         <Section title="Sentiment trajectory (VADER, −1 to +1)">
-          <ResponsiveContainer width="100%" height={140}>
-            <LineChart data={arc.metrics}>
-              {grid}
-              <XAxis dataKey="day" {...axis} />
-              <YAxis domain={[-1, 1]} {...axis} width={32} />
-              <ReferenceLine y={0} stroke="var(--baseline)" />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Line
-                dataKey="sentiment_mean"
-                name="Sentiment"
-                stroke="var(--series-sentiment)"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {arc.metrics.length < 2 ? (
+            <NeedsMoreDays />
+          ) : (
+            <ResponsiveContainer width="100%" height={140}>
+              <LineChart data={arc.metrics}>
+                {grid}
+                <XAxis dataKey="day" {...axis} />
+                <YAxis domain={[-1, 1]} {...axis} width={32} />
+                <ReferenceLine y={0} stroke="var(--baseline)" />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line
+                  dataKey="sentiment_mean"
+                  name="Sentiment"
+                  stroke="var(--series-sentiment)"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </Section>
 
         <Section title="Narrative drift (day-over-day centroid shift)">
-          <ResponsiveContainer width="100%" height={140}>
-            <LineChart data={arc.metrics}>
-              {grid}
-              <XAxis dataKey="day" {...axis} />
-              <YAxis {...axis} width={32} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Line
-                dataKey="drift_score"
-                name="Drift"
-                stroke="var(--series-drift)"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {arc.metrics.length < 2 ? (
+            <NeedsMoreDays />
+          ) : (
+            <ResponsiveContainer width="100%" height={140}>
+              <LineChart data={arc.metrics}>
+                {grid}
+                <XAxis dataKey="day" {...axis} />
+                <YAxis {...axis} width={32} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line
+                  dataKey="drift_score"
+                  name="Drift"
+                  stroke="var(--series-drift)"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </Section>
 
         <Section title="Drift map (articles in embedding space)">
@@ -176,7 +198,7 @@ export default function Story() {
         </Section>
 
         <Section title="Articles">
-          <ul className="grid gap-2">
+          <ul className="flex flex-col gap-2">
             {arc.articles.map((a) => (
               <li key={a.id} className="flex items-center gap-2 text-sm">
                 <BiasChip label={a.bias_label} />
@@ -184,11 +206,14 @@ export default function Story() {
                   href={a.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="truncate hover:underline"
+                  className="min-w-0 flex-1 truncate hover:underline"
                 >
                   {a.title ?? a.url}
                 </a>
-                <span className="ml-auto shrink-0 text-xs" style={{ color: "var(--ink-muted)" }}>
+                <span
+                  className="max-w-[40%] shrink-0 truncate text-right text-xs"
+                  style={{ color: "var(--ink-muted)" }}
+                >
                   {a.outlet} · {a.published_at}
                 </span>
               </li>
