@@ -41,6 +41,7 @@ export type StoryArc = {
   status: string;
   summary: string | null;
   metrics: DailyMetric[];
+  forecast: { day: string; predicted_count: number }[];
   articles: ArticleOut[];
 };
 

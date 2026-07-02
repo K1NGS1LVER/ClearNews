@@ -69,12 +69,18 @@ class ArticleOut(BaseModel):
     bias_score: float | None
 
 
+class ForecastDay(BaseModel):
+    day: date
+    predicted_count: float
+
+
 class StoryArc(BaseModel):
     id: int
     title: str
     status: str
     summary: str | None
     metrics: list[DailyMetric]
+    forecast: list[ForecastDay]
     articles: list[ArticleOut]
 
 
@@ -138,17 +144,30 @@ def list_stories(status: str | None = None, db: Session = Depends(get_db)):
 
 @app.get("/api/stories/{story_id}/arc", response_model=StoryArc)
 def story_arc(story_id: int, db: Session = Depends(get_db)):
+    from datetime import timedelta
+
+    from pipeline.metrics import forecast_volume
+
     story = db.get(Story, story_id)
     if not story:
         raise HTTPException(404, "story not found")
     metrics = sorted(story.daily_metrics, key=lambda m: m.day)
     articles = sorted(story.articles, key=lambda a: a.published_at)
+
+    predicted = forecast_volume([m.article_count for m in metrics])
+    last_day = metrics[-1].day if metrics else None
+    forecast = [
+        ForecastDay(day=last_day + timedelta(days=i + 1), predicted_count=p)
+        for i, p in enumerate(predicted)
+    ]
+
     return StoryArc(
         id=story.id,
         title=story.title,
         status=story.status,
         summary=story.summary,
         metrics=[DailyMetric.model_validate(m, from_attributes=True) for m in metrics],
+        forecast=forecast,
         articles=[_article_out(a) for a in articles],
     )
 

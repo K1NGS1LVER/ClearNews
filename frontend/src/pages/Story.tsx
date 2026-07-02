@@ -62,6 +62,14 @@ export default function Story() {
 
   if (!arc) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading…</p>;
 
+  const volumeData = [
+    ...arc.metrics.map((m) => ({ day: m.day, article_count: m.article_count })),
+    ...arc.forecast.map((f) => ({
+      day: f.day,
+      predicted_count: Math.round(f.predicted_count * 10) / 10,
+    })),
+  ];
+
   const biasData = arc.metrics.map((m) => ({
     day: m.day,
     left: m.bias_left_share ?? 0,
@@ -104,14 +112,21 @@ export default function Story() {
 
         <Section title="Coverage volume (articles per day)">
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={arc.metrics}>
+            <BarChart data={volumeData}>
               {grid}
               <XAxis dataKey="day" {...axis} />
               <YAxis allowDecimals={false} {...axis} width={28} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--grid)" }} />
               <Bar dataKey="article_count" name="Articles" fill="var(--series-volume)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="predicted_count" name="Forecast" fill="var(--series-volume)" fillOpacity={0.35} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
+          {arc.forecast.length > 0 && (
+            <p className="mt-1 text-xs" style={{ color: "var(--ink-muted)" }}>
+              Lighter bars: projected volume for the next {arc.forecast.length} days
+              (log-linear trend on the past week).
+            </p>
+          )}
         </Section>
 
         <Section title="Coverage lean over time (share of articles)">
