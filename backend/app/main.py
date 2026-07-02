@@ -1,0 +1,221 @@
+"""ClearNews REST API.
+
+Run: uv run uvicorn app.main:app --reload
+"""
+
+from datetime import date
+
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.db import SessionLocal
+from app.models import Article, Outlet, Story
+
+app = FastAPI(title="ClearNews API")
+
+
+def get_db():
+    with SessionLocal() as session:
+        yield session
+
+
+class StoryCard(BaseModel):
+    id: int
+    title: str
+    status: str
+    first_seen: date
+    last_seen: date
+    article_count: int
+    bias_left_share: float | None
+    bias_center_share: float | None
+    bias_right_share: float | None
+    daily_counts: list[int]  # lifecycle sparkline
+
+
+class DailyMetric(BaseModel):
+    day: date
+    article_count: int
+    unique_outlets: int
+    sentiment_mean: float | None
+    drift_score: float | None
+    bias_left_share: float | None
+    bias_center_share: float | None
+    bias_right_share: float | None
+
+
+class ArticleOut(BaseModel):
+    id: int
+    url: str
+    title: str | None
+    outlet: str
+    published_at: date
+    sentiment: float | None
+    bias_label: str | None
+    bias_score: float | None
+
+
+class StoryArc(BaseModel):
+    id: int
+    title: str
+    status: str
+    summary: str | None
+    metrics: list[DailyMetric]
+    articles: list[ArticleOut]
+
+
+class OutletRow(BaseModel):
+    domain: str
+    article_count: int
+    sentiment_mean: float | None
+    bias_mean: float | None
+    outlet_overall_bias: float | None
+
+
+def _article_out(a: Article) -> ArticleOut:
+    return ArticleOut(
+        id=a.id,
+        url=a.url,
+        title=a.title,
+        outlet=a.outlet.domain,
+        published_at=a.published_at.date(),
+        sentiment=a.sentiment,
+        bias_label=a.bias_label,
+        bias_score=a.bias_score,
+    )
+
+
+@app.get("/api/stories", response_model=list[StoryCard])
+def list_stories(status: str | None = None, db: Session = Depends(get_db)):
+    q = select(Story)
+    if status:
+        q = q.where(Story.status == status)
+    stories = db.execute(q.order_by(Story.last_seen.desc())).scalars().all()
+
+    cards = []
+    for s in stories:
+        metrics = sorted(s.daily_metrics, key=lambda m: m.day)
+        if not metrics:
+            continue
+        total = sum(m.article_count for m in metrics)
+        # bias shares weighted by daily volume
+        weight = lambda attr: (
+            sum((getattr(m, attr) or 0) * m.article_count for m in metrics) / total
+            if total
+            else None
+        )
+        cards.append(
+            StoryCard(
+                id=s.id,
+                title=s.title,
+                status=s.status,
+                first_seen=s.first_seen.date(),
+                last_seen=s.last_seen.date(),
+                article_count=total,
+                bias_left_share=weight("bias_left_share"),
+                bias_center_share=weight("bias_center_share"),
+                bias_right_share=weight("bias_right_share"),
+                daily_counts=[m.article_count for m in metrics],
+            )
+        )
+    cards.sort(key=lambda c: c.article_count, reverse=True)
+    return cards
+
+
+@app.get("/api/stories/{story_id}/arc", response_model=StoryArc)
+def story_arc(story_id: int, db: Session = Depends(get_db)):
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+    metrics = sorted(story.daily_metrics, key=lambda m: m.day)
+    articles = sorted(story.articles, key=lambda a: a.published_at)
+    return StoryArc(
+        id=story.id,
+        title=story.title,
+        status=story.status,
+        summary=story.summary,
+        metrics=[DailyMetric.model_validate(m, from_attributes=True) for m in metrics],
+        articles=[_article_out(a) for a in articles],
+    )
+
+
+@app.get("/api/stories/{story_id}/outlets", response_model=list[OutletRow])
+def story_outlets(story_id: int, db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(
+            Outlet.domain,
+            func.count(Article.id),
+            func.avg(Article.sentiment),
+            func.avg(Article.bias_score),
+            Outlet.mean_bias,
+        )
+        .join(Article, Article.outlet_id == Outlet.id)
+        .where(Article.story_id == story_id)
+        .group_by(Outlet.domain, Outlet.mean_bias)
+        .order_by(func.count(Article.id).desc())
+    ).all()
+    return [
+        OutletRow(
+            domain=d,
+            article_count=n,
+            sentiment_mean=s,
+            bias_mean=b,
+            outlet_overall_bias=ob,
+        )
+        for d, n, s, b, ob in rows
+    ]
+
+
+@app.get("/api/search", response_model=list[ArticleOut])
+def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
+    from pipeline.nlp import _embedder
+
+    query_vec = _embedder().encode(q)
+    articles = (
+        db.execute(
+            select(Article)
+            .where(Article.embedding.isnot(None))
+            .order_by(Article.embedding.cosine_distance(query_vec))
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    return [_article_out(a) for a in articles]
+
+
+@app.get("/api/analytics")
+def analytics(db: Session = Depends(get_db)):
+    status_counts = dict(
+        db.execute(select(Story.status, func.count()).group_by(Story.status)).all()
+    )
+    bias_counts = dict(
+        db.execute(
+            select(Article.bias_label, func.count())
+            .where(Article.bias_label.isnot(None))
+            .group_by(Article.bias_label)
+        ).all()
+    )
+    lifespans = db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", Story.last_seen - Story.first_seen) / 86400.0
+            )
+        )
+    ).scalar()
+    top_outlets = db.execute(
+        select(Outlet.domain, func.count(Article.id), Outlet.mean_bias)
+        .join(Article, Article.outlet_id == Outlet.id)
+        .group_by(Outlet.domain, Outlet.mean_bias)
+        .order_by(func.count(Article.id).desc())
+        .limit(15)
+    ).all()
+    return {
+        "stories_by_status": status_counts,
+        "articles_by_bias": bias_counts,
+        "avg_story_lifespan_days": lifespans,
+        "top_outlets": [
+            {"domain": d, "articles": n, "mean_bias": b} for d, n, b in top_outlets
+        ],
+    }
