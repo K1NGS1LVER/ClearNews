@@ -198,6 +198,31 @@ def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
     return [_article_out(a) for a in articles]
 
 
+class ArticleDetail(ArticleOut):
+    content: str | None
+    story_id: int | None
+    story_title: str | None
+
+
+@app.get("/api/articles/{article_id}", response_model=ArticleDetail)
+def article_detail(article_id: int, db: Session = Depends(get_db)):
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(404, "article not found")
+
+    if article.content is None:  # not fetched yet; '' means fetch failed before
+        from pipeline.fetch_content import fetch_article
+
+        fetch_article(db, article)
+
+    return ArticleDetail(
+        **_article_out(article).model_dump(),
+        content=article.content or None,
+        story_id=article.story_id,
+        story_title=article.story.title if article.story else None,
+    )
+
+
 @app.get("/api/stories/{story_id}/drift")
 def story_drift(story_id: int, db: Session = Depends(get_db)):
     """Article positions in 2D embedding space + daily centroid trajectory."""

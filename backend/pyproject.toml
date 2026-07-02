@@ -27,6 +27,7 @@ dependencies = [
     "umap-learn>=0.5.12",
     "xgboost>=3.3.0",
     "numba>=0.60",
+    "trafilatura>=2.1.0",
 ]
 
 [dependency-groups]

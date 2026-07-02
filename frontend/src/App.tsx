@@ -1,5 +1,6 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import Analytics from "./pages/Analytics";
+import Article from "./pages/Article";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
 import Search from "./pages/Search";
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Feed />} />
         <Route path="/story/:id" element={<Story />} />
+        <Route path="/article/:id" element={<Article />} />
         <Route path="/search" element={<Search />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/chat" element={<Chat />} />

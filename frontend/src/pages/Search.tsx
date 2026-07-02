@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchSearch } from "../api";
 
 export default function Search() {
@@ -47,9 +48,9 @@ export default function Search() {
             className="rounded-lg border p-3"
             style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
           >
-            <a href={a.url} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">
+            <Link to={`/article/${a.id}`} className="text-sm font-medium hover:underline">
               {a.title ?? a.url}
-            </a>
+            </Link>
             <div className="mt-1 text-xs" style={{ color: "var(--ink-muted)" }}>
               {a.outlet} · {a.published_at}
               {a.bias_label && <> · leans {a.bias_label}</>}

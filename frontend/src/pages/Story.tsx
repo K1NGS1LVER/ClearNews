@@ -202,14 +202,12 @@ export default function Story() {
             {arc.articles.map((a) => (
               <li key={a.id} className="flex items-center gap-2 text-sm">
                 <BiasChip label={a.bias_label} />
-                <a
-                  href={a.url}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  to={`/article/${a.id}`}
                   className="min-w-0 flex-1 truncate hover:underline"
                 >
                   {a.title ?? a.url}
-                </a>
+                </Link>
                 <span
                   className="max-w-[40%] shrink-0 truncate text-right text-xs"
                   style={{ color: "var(--ink-muted)" }}

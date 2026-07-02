@@ -126,9 +126,7 @@ export default function ChatPanel({ storyId }: { storyId?: number }) {
                   {m.sources.map((s) => (
                     <a
                       key={s.article_id}
-                      href={s.url}
-                      target="_blank"
-                      rel="noreferrer"
+                      href={`/article/${s.article_id}`}
                       title={s.title ?? s.url}
                       className="rounded-full border px-2 py-0.5 text-xs hover:underline"
                       style={{ borderColor: "var(--border)", color: "var(--ink-2)" }}

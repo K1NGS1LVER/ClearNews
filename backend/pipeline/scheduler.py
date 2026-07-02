@@ -14,6 +14,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from app.db import SessionLocal
 from pipeline.cluster import run_clustering
+from pipeline.fetch_content import run_fetch
 from pipeline.ingest import ingest_latest
 from pipeline.metrics import run_metrics
 from pipeline.nlp import process_all
@@ -21,6 +22,7 @@ from pipeline.topics import run_topics
 
 
 def hourly() -> None:
+    print(run_fetch())  # full text first so NLP works on content, not titles
     process_all()
     with SessionLocal() as session:
         print(run_clustering(session))
