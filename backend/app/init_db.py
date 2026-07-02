@@ -11,6 +11,14 @@ def init_db() -> None:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.commit()
     Base.metadata.create_all(engine)
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_articles_embedding_hnsw "
+                "ON articles USING hnsw (embedding vector_cosine_ops)"
+            )
+        )
+        conn.commit()
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import {
 import { fetchArc, fetchOutlets } from "../api";
 import BiasBar from "../components/BiasBar";
 import ChatPanel from "../components/ChatPanel";
+import DriftMap from "../components/DriftMap";
 
 const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false } as const;
 const grid = <CartesianGrid stroke="var(--grid)" vertical={false} />;
@@ -139,6 +140,10 @@ export default function Story() {
               />
             </LineChart>
           </ResponsiveContainer>
+        </Section>
+
+        <Section title="Drift map (articles in embedding space)">
+          <DriftMap storyId={id} />
         </Section>
 
         <Section title="Ask about this story">

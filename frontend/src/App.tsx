@@ -1,6 +1,8 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom";
+import Analytics from "./pages/Analytics";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
+import Search from "./pages/Search";
 import Story from "./pages/Story";
 
 export default function App() {
@@ -21,6 +23,12 @@ export default function App() {
             <NavLink to="/" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
               Feed
             </NavLink>
+            <NavLink to="/search" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
+              Search
+            </NavLink>
+            <NavLink to="/analytics" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
+              Analytics
+            </NavLink>
             <NavLink to="/chat" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
               Ask
             </NavLink>
@@ -30,6 +38,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Feed />} />
         <Route path="/story/:id" element={<Story />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="/chat" element={<Chat />} />
       </Routes>
     </>

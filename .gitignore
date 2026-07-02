@@ -16,3 +16,4 @@ dist/
 
 # Data
 backend/data/
+backend/pipeline/data/

@@ -187,6 +187,82 @@ def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
     return [_article_out(a) for a in articles]
 
 
+@app.get("/api/stories/{story_id}/drift")
+def story_drift(story_id: int, db: Session = Depends(get_db)):
+    """Article positions in 2D embedding space + daily centroid trajectory."""
+    import numpy as np
+
+    from pipeline.viz import daily_centroids, umap_2d
+
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+    articles = [a for a in story.articles if a.embedding is not None]
+    if len(articles) < 2:
+        return {"points": [], "trajectory": []}
+
+    coords = umap_2d(np.array([a.embedding for a in articles]))
+    days = [a.published_at.date() for a in articles]
+    return {
+        "points": [
+            {
+                "article_id": a.id,
+                "title": a.title,
+                "outlet": a.outlet.domain,
+                "day": d.isoformat(),
+                "bias_label": a.bias_label,
+                "x": float(x),
+                "y": float(y),
+            }
+            for a, d, (x, y) in zip(articles, days, coords)
+        ],
+        "trajectory": daily_centroids(days, coords),
+    }
+
+
+@app.get("/api/outlets/map")
+def outlet_map(min_articles: int = 3, db: Session = Depends(get_db)):
+    """Outlets projected by their mean article embedding, with bias and volume."""
+    import numpy as np
+
+    from pipeline.viz import umap_2d
+
+    rows = db.execute(
+        select(
+            Outlet.id, Outlet.domain, Outlet.mean_bias, func.count(Article.id)
+        )
+        .join(Article, Article.outlet_id == Outlet.id)
+        .where(Article.embedding.isnot(None))
+        .group_by(Outlet.id)
+        .having(func.count(Article.id) >= min_articles)
+    ).all()
+    if len(rows) < 2:
+        return {"outlets": []}
+
+    centroids = []
+    for outlet_id, *_ in rows:
+        embs = db.execute(
+            select(Article.embedding).where(
+                Article.outlet_id == outlet_id, Article.embedding.isnot(None)
+            )
+        ).scalars().all()
+        centroids.append(np.mean(np.array(embs), axis=0))
+
+    coords = umap_2d(np.array(centroids))
+    return {
+        "outlets": [
+            {
+                "domain": domain,
+                "mean_bias": bias,
+                "articles": n,
+                "x": float(x),
+                "y": float(y),
+            }
+            for (_, domain, bias, n), (x, y) in zip(rows, coords)
+        ]
+    }
+
+
 class ChatMessage(BaseModel):
     role: str  # "user" | "assistant"
     content: str
@@ -261,6 +337,21 @@ def analytics(db: Session = Depends(get_db)):
             )
         )
     ).scalar()
+    by_category = db.execute(
+        select(
+            Story.category,
+            func.count(),
+            func.avg(
+                func.extract("epoch", Story.last_seen - Story.first_seen) / 86400.0
+            ),
+        ).group_by(Story.category)
+    ).all()
+    at_risk = db.execute(
+        select(Story.id, Story.title, Story.death_risk)
+        .where(Story.death_risk.isnot(None))
+        .order_by(Story.death_risk.desc())
+        .limit(10)
+    ).all()
     top_outlets = db.execute(
         select(Outlet.domain, func.count(Article.id), Outlet.mean_bias)
         .join(Article, Article.outlet_id == Outlet.id)
@@ -272,6 +363,13 @@ def analytics(db: Session = Depends(get_db)):
         "stories_by_status": status_counts,
         "articles_by_bias": bias_counts,
         "avg_story_lifespan_days": lifespans,
+        "by_category": [
+            {"category": c or "general", "stories": n, "avg_lifespan_days": float(d or 0)}
+            for c, n, d in by_category
+        ],
+        "top_death_risk": [
+            {"story_id": i, "title": t, "death_risk": r} for i, t, r in at_risk
+        ],
         "top_outlets": [
             {"domain": d, "articles": n, "mean_bias": b} for d, n, b in top_outlets
         ],
