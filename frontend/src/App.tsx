@@ -1,4 +1,5 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
+import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
 import Story from "./pages/Story";
 
@@ -16,11 +17,20 @@ export default function App() {
           <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
             news story lifecycle &amp; narrative drift
           </span>
+          <nav className="ml-auto flex gap-4 text-sm">
+            <NavLink to="/" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
+              Feed
+            </NavLink>
+            <NavLink to="/chat" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400 })}>
+              Ask
+            </NavLink>
+          </nav>
         </div>
       </header>
       <Routes>
         <Route path="/" element={<Feed />} />
         <Route path="/story/:id" element={<Story />} />
+        <Route path="/chat" element={<Chat />} />
       </Routes>
     </>
   );

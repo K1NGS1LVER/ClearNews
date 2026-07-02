@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { fetchArc, fetchOutlets } from "../api";
 import BiasBar from "../components/BiasBar";
+import ChatPanel from "../components/ChatPanel";
 
 const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false } as const;
 const grid = <CartesianGrid stroke="var(--grid)" vertical={false} />;
@@ -138,6 +139,10 @@ export default function Story() {
               />
             </LineChart>
           </ResponsiveContainer>
+        </Section>
+
+        <Section title="Ask about this story">
+          <ChatPanel storyId={id} />
         </Section>
 
         <Section title="Outlets covering this story">

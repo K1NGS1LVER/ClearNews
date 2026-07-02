@@ -3,9 +3,11 @@
 Run: uv run uvicorn app.main:app --reload
 """
 
+import json
 from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -183,6 +185,61 @@ def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
         .all()
     )
     return [_article_out(a) for a in articles]
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    story_id: int | None = None
+
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest):
+    from agent.chat import stream_chat
+
+    async def sse():
+        async for event in stream_chat([m.model_dump() for m in req.messages], req.story_id):
+            yield f"data: {json.dumps(event)}\n\n"
+        yield "data: {\"type\": \"done\"}\n\n"
+
+    return StreamingResponse(sse(), media_type="text/event-stream")
+
+
+@app.get("/api/suggest")
+def suggest(story_id: int | None = None, context: str = "", db: Session = Depends(get_db)):
+    from agent.chat import suggest_questions
+
+    if story_id and not context:
+        story = db.get(Story, story_id)
+        if not story:
+            raise HTTPException(404, "story not found")
+        titles = "\n".join(a.title or "" for a in story.articles[:30])
+        context = f"News story: {story.title}\nArticles:\n{titles}"
+    return {"questions": suggest_questions(context) if context else []}
+
+
+@app.post("/api/summarise/{story_id}")
+async def summarise(story_id: int, db: Session = Depends(get_db)):
+    from agent.chat import stream_chat
+
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+
+    parts: list[str] = []
+    async for event in stream_chat(
+        [{"role": "user", "content": "Summarize this story's full arc."}], story_id
+    ):
+        if event["type"] == "token":
+            parts.append(event["content"])
+    summary = "".join(parts)
+    story.summary = summary
+    db.commit()
+    return {"story_id": story_id, "summary": summary}
 
 
 @app.get("/api/analytics")
