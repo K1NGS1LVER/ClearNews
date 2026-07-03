@@ -1,6 +1,16 @@
 """2D projections for visualisation: story drift trajectories, outlet map."""
 
+import threading
+
 import numpy as np
+
+# UMAP's numba-jitted internals use the default "workqueue" threading layer,
+# which is not safe to enter from multiple threads at once. FastAPI runs each
+# sync endpoint in its own threadpool thread, so two concurrent /drift or
+# /outlets/map requests both hitting UMAP crash the whole process. Serialize
+# instead of chasing a threading-layer swap (e.g. TBB) - this endpoint is not
+# hot enough for the lock to matter.
+_umap_lock = threading.Lock()
 
 
 def umap_2d(embeddings: np.ndarray, seed: int = 42) -> np.ndarray:
@@ -13,9 +23,10 @@ def umap_2d(embeddings: np.ndarray, seed: int = 42) -> np.ndarray:
 
     from umap import UMAP
 
-    return UMAP(
-        n_components=2, n_neighbors=min(15, n - 1), random_state=seed
-    ).fit_transform(embeddings)
+    with _umap_lock:
+        return UMAP(
+            n_components=2, n_neighbors=min(15, n - 1), random_state=seed
+        ).fit_transform(embeddings)
 
 
 def daily_centroids(days: list, coords: np.ndarray) -> list[dict]:
