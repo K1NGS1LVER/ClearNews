@@ -57,6 +57,7 @@ export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: 
   const [busy, setBusy] = useState(false);
   const [suggested, setSuggested] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (storyId) {
@@ -78,10 +79,14 @@ export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: 
     setInput("");
     setBusy(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
           story_id: storyId ?? null,
@@ -127,18 +132,48 @@ export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: 
         .then((r) => r.json())
         .then((d) => setSuggested(d.questions ?? []))
         .catch(() => {});
-    } catch {
-      setMessages((ms) => [
-        ...ms.slice(0, -1),
-        { role: "assistant", content: "Something went wrong. Is the agent configured (GROQ_API_KEY)?" },
-      ]);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setMessages((ms) => {
+          const last = ms[ms.length - 1];
+          return last?.role === "assistant" && !last.content ? ms.slice(0, -1) : ms;
+        });
+      } else {
+        setMessages((ms) => [
+          ...ms.slice(0, -1),
+          { role: "assistant", content: "Something went wrong. Is the agent configured (GROQ_API_KEY)?" },
+        ]);
+      }
     } finally {
       setBusy(false);
+      abortRef.current = null;
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  function clearHistory() {
+    if (!window.confirm("Clear this conversation?")) return;
+    setMessages([]);
+    setSuggested([]);
   }
 
   return (
     <div className={`flex flex-col ${fill ? "h-full" : "h-[28rem]"}`}>
+      {messages.length > 0 && (
+        <div className="mb-1 flex shrink-0 justify-end">
+          <button
+            onClick={clearHistory}
+            disabled={busy}
+            className="cursor-pointer hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}
+          >
+            CLEAR
+          </button>
+        </div>
+      )}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
         {messages.length === 0 && (
           <p className="py-8 text-center text-sm" style={{ color: "var(--ink-muted)" }}>
@@ -228,12 +263,13 @@ export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: 
           style={{ borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }}
         />
         <button
-          type="submit"
-          disabled={busy || !input.trim()}
+          type={busy ? "button" : "submit"}
+          onClick={busy ? stop : undefined}
+          disabled={!busy && !input.trim()}
           className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-40"
           style={{ background: "var(--ink)", color: "var(--surface-1)" }}
         >
-          Send
+          {busy ? "Stop" : "Send"}
         </button>
       </form>
     </div>
