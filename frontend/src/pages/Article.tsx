@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { ArticleOut } from "../api";
+import { decodeEntities, type ArticleOut } from "../api";
+import StoryAsk from "../components/StoryAsk";
 
 type ArticleDetail = ArticleOut & {
   content: string | null;
@@ -8,10 +9,12 @@ type ArticleDetail = ArticleOut & {
   story_title: string | null;
 };
 
+const mono = { fontFamily: "var(--font-mono)" } as const;
+const serif = { fontFamily: "var(--font-serif)" } as const;
+
 const chipStyle = (label: string | null) => ({
-  background:
-    label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--bias-center)",
-  color: label === "center" || !label ? "var(--ink-2)" : "#fff",
+  background: label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)",
+  color: label === "center" || !label ? "var(--chip-center-ink)" : "#fff",
 });
 
 export default function Article() {
@@ -28,31 +31,47 @@ export default function Article() {
     return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Fetching article…</p>;
   if (!a) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Article not found.</p>;
 
-  return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+  const content = (
+    <div className="mx-auto max-w-2xl px-4 pb-8 pt-2 sm:px-8">
       {a.story_id && (
-        <Link to={`/story/${a.story_id}`} className="text-sm" style={{ color: "var(--ink-muted)" }}>
-          ← {a.story_title ?? "Back to story"}
+        <Link
+          to={`/story/${a.story_id}`}
+          className="mb-4 flex items-center gap-2"
+          style={{ ...mono, fontSize: 11, color: "var(--ink-muted)" }}
+        >
+          <span>← STORY:</span>
+          <span className="truncate underline underline-offset-[3px]" style={{ color: "var(--ink-2)" }}>
+            {decodeEntities(a.story_title ?? "Back to story").toUpperCase()}
+          </span>
         </Link>
       )}
-      <article
-        className="mt-3 rounded-lg border p-6"
-        style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
-      >
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--ink-2)" }}>
-          {a.bias_label && (
-            <span className="rounded px-1.5 py-0.5 font-semibold uppercase" style={chipStyle(a.bias_label)}>
-              leans {a.bias_label}
-            </span>
-          )}
-          <span>{a.outlet}</span>
-          <span>· {a.published_at}</span>
-          {a.sentiment !== null && <span>· sentiment {a.sentiment.toFixed(2)}</span>}
+      <article className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2.5" style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.05em", color: "var(--ink-muted)" }}>
+            {a.bias_label && (
+              <span className="w-[52px] rounded py-0.5 text-center text-[9px] font-semibold uppercase" style={{ letterSpacing: "0.08em", ...chipStyle(a.bias_label) }}>
+                {a.bias_label}
+              </span>
+            )}
+            <span>{a.outlet.toUpperCase()}</span>
+            <span>·</span>
+            <span>{a.published_at}</span>
+            {a.sentiment !== null && (
+              <>
+                <span>·</span>
+                <span style={{ color: a.sentiment > 0 ? "var(--status-active)" : a.sentiment < 0 ? "var(--bias-right)" : "var(--ink-muted)" }}>
+                  SENTIMENT {a.sentiment > 0 ? "+" : ""}{a.sentiment.toFixed(2)}
+                </span>
+              </>
+            )}
+          </div>
+          <h1 style={{ ...serif, fontSize: 27, fontWeight: 700, lineHeight: 1.25, letterSpacing: "-0.01em", color: "var(--ink)" }}>
+            {a.title ? decodeEntities(a.title) : "(untitled)"}
+          </h1>
         </div>
-        <h1 className="mb-4 text-2xl font-bold leading-tight">{a.title ?? "(untitled)"}</h1>
 
         {a.content ? (
-          <div className="flex flex-col gap-3 text-[15px] leading-relaxed">
+          <div className="flex flex-col gap-3.5" style={{ ...serif, fontSize: 16, lineHeight: 1.7, color: "var(--ink)" }}>
             {a.content.split(/\n+/).map((p, i) => (
               <p key={i}>{p}</p>
             ))}
@@ -67,12 +86,14 @@ export default function Article() {
           href={a.url}
           target="_blank"
           rel="noreferrer"
-          className="mt-6 inline-block text-sm font-medium hover:underline"
-          style={{ color: "var(--bias-left)" }}
+          className="mt-2 inline-block w-fit underline underline-offset-[3px] hover:opacity-80"
+          style={{ ...mono, fontSize: 11, color: "var(--ink-2)" }}
         >
-          Read original at {a.outlet} ↗
+          READ ORIGINAL AT {a.outlet.toUpperCase()} ↗
         </a>
       </article>
     </div>
   );
+
+  return a.story_id ? <StoryAsk storyId={a.story_id}>{content}</StoryAsk> : content;
 }

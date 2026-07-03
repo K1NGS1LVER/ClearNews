@@ -9,8 +9,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { decodeEntities } from "../api";
 import BiasBar from "../components/BiasBar";
 import OutletMap from "../components/OutletMap";
+
+const mono = { fontFamily: "var(--font-mono)" } as const;
+const serif = { fontFamily: "var(--font-serif)" } as const;
 
 type Analytics = {
   stories_by_status: Record<string, number>;
@@ -21,25 +25,22 @@ type Analytics = {
   top_outlets: { domain: string; articles: number; mean_bias: number | null }[];
 };
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section
-      className="rounded-lg border p-4"
-      style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
-    >
-      <h3 className="mb-2 text-sm font-semibold" style={{ color: "var(--ink-2)" }}>
-        {title}
-      </h3>
+    <section className="rounded-[10px] border p-5" style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}>
+      <h3 className="mb-3" style={{ ...serif, fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>{title}</h3>
       {children}
     </section>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ value, label, dot }: { value: string; label: string; dot?: string }) {
   return (
-    <div className="rounded-lg border p-4" style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs" style={{ color: "var(--ink-muted)" }}>{label}</div>
+    <div className="rounded-[10px] border p-4" style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}>
+      <div style={{ ...mono, fontSize: 26, fontWeight: 600, color: "var(--ink)" }}>{value}</div>
+      <div className="mt-0.5" style={{ ...mono, fontSize: "9.5px", letterSpacing: "0.08em", color: dot ?? "var(--ink-muted)" }}>
+        {dot ? "● " : "○ "}{label}
+      </div>
     </div>
   );
 }
@@ -56,95 +57,95 @@ export default function Analytics() {
   const status = data.stories_by_status;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
+    <div className="mx-auto max-w-4xl px-4 pb-8 pt-2 sm:px-8">
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="active stories" value={String(status.active ?? 0)} />
-        <Stat label="fading stories" value={String(status.fading ?? 0)} />
-        <Stat label="dead stories" value={String(status.dead ?? 0)} />
-        <Stat
-          label="avg lifespan (days)"
-          value={(data.avg_story_lifespan_days ?? 0).toFixed(1)}
-        />
+        <Stat value={String(status.active ?? 0)} label="ACTIVE STORIES" dot="var(--status-active)" />
+        <Stat value={String(status.fading ?? 0)} label="FADING" dot="var(--status-fading)" />
+        <Stat value={String(status.dead ?? 0)} label="DEAD (ARCHIVE)" />
+        <Stat value={(data.avg_story_lifespan_days ?? 0).toFixed(1)} label="AVG STORY LIFESPAN (D)" />
       </div>
 
       <div className="flex flex-col gap-4">
-        <Card title="Political lean across all coverage">
+        <Panel title="Political lean across all coverage">
           <BiasBar
             left={(bias.left ?? 0) / totalBias}
             center={(bias.center ?? 0) / totalBias}
             right={(bias.right ?? 0) / totalBias}
             showLabels
           />
-        </Card>
+          <div className="mt-1 flex justify-between" style={{ ...mono, fontSize: 10, color: "var(--ink-muted)" }}>
+            <span>{bias.left ?? 0} articles</span>
+            <span>{bias.center ?? 0} articles</span>
+            <span>{bias.right ?? 0} articles</span>
+          </div>
+        </Panel>
 
-        <Card title="Stories and lifespan by category">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.by_category}>
-              <CartesianGrid stroke="var(--grid)" vertical={false} />
-              <XAxis dataKey="category" stroke="var(--baseline)" fontSize={11} tickLine={false} />
-              <YAxis allowDecimals={false} stroke="var(--baseline)" fontSize={11} tickLine={false} width={28} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--surface-1)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-                cursor={{ fill: "var(--grid)" }}
-              />
-              <Bar dataKey="stories" name="Stories" fill="var(--series-volume)" radius={[4, 4, 0, 0]} maxBarSize={48} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Panel title="Stories by category">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={data.by_category}>
+                <CartesianGrid stroke="var(--grid)" vertical={false} />
+                <XAxis dataKey="category" stroke="var(--baseline)" fontSize={11} tickLine={false} />
+                <YAxis allowDecimals={false} stroke="var(--baseline)" fontSize={11} tickLine={false} width={28} />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}
+                  cursor={{ fill: "var(--grid)" }}
+                />
+                <Bar dataKey="stories" name="Stories" fill="var(--series-volume)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Panel>
 
-        <Card title="Outlet similarity map">
+          {data.top_death_risk.length > 0 && (
+            <Panel title="Stories at risk of dying">
+              <ul className="flex flex-col">
+                {data.top_death_risk.map((s, i) => (
+                  <li key={s.story_id} className="flex items-center gap-3 py-2" style={{ borderTop: i === 0 ? "none" : "1px solid var(--hair)" }}>
+                    <span
+                      className="w-10 shrink-0 text-right font-semibold tabular-nums"
+                      style={{ ...mono, fontSize: 12, color: s.death_risk > 0.7 ? "var(--bias-right)" : "var(--ink-2)" }}
+                    >
+                      {Math.round(s.death_risk * 100)}%
+                    </span>
+                    <Link to={`/story/${s.story_id}`} className="min-w-0 flex-1 truncate text-[13px] hover:underline" style={{ color: "var(--ink)" }}>
+                      {decodeEntities(s.title)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <span className="mt-1 block" style={{ ...mono, fontSize: "9.5px", color: "var(--ink-muted)" }}>
+                MODEL SCORE · P(NO COVERAGE IN NEXT 48H)
+              </span>
+            </Panel>
+          )}
+        </div>
+
+        <Panel title="Outlet landscape — proximity = similar coverage">
           <OutletMap />
-        </Card>
+        </Panel>
 
-        {data.top_death_risk.length > 0 && (
-          <Card title="Stories most at risk of dying (model score)">
-            <ul className="flex flex-col gap-1 text-sm">
-              {data.top_death_risk.map((s) => (
-                <li key={s.story_id} className="flex items-center gap-2">
-                  <span
-                    className="w-12 shrink-0 text-right font-semibold tabular-nums"
-                    style={{ color: s.death_risk > 0.7 ? "#d03b3b" : "var(--ink-2)" }}
-                  >
-                    {Math.round(s.death_risk * 100)}%
-                  </span>
-                  <Link to={`/story/${s.story_id}`} className="truncate hover:underline">
-                    {s.title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        <Card title="Most active outlets">
+        <Panel title="Most active outlets">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase" style={{ color: "var(--ink-muted)" }}>
-                <th className="py-1">Outlet</th>
-                <th className="text-right">Articles</th>
-                <th className="text-right">Mean lean</th>
+              <tr style={{ ...mono, fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }} className="text-left uppercase">
+                <th className="pb-1.5 font-normal">Outlet</th>
+                <th className="pb-1.5 text-right font-normal">Articles</th>
+                <th className="pb-1.5 text-right font-normal">Mean lean</th>
               </tr>
             </thead>
             <tbody>
               {data.top_outlets.map((o) => (
-                <tr key={o.domain} style={{ borderTop: "1px solid var(--grid)" }}>
-                  <td className="py-1.5">{o.domain}</td>
-                  <td className="text-right tabular-nums">{o.articles}</td>
-                  <td className="text-right tabular-nums">
-                    {o.mean_bias === null
-                      ? "–"
-                      : `${o.mean_bias > 0 ? "R" : "L"}${Math.abs(o.mean_bias).toFixed(2)}`}
+                <tr key={o.domain} style={{ borderTop: "1px solid var(--hair)" }}>
+                  <td className="py-2">{o.domain}</td>
+                  <td className="py-2 text-right tabular-nums" style={mono}>{o.articles}</td>
+                  <td className="py-2 text-right tabular-nums" style={mono}>
+                    {o.mean_bias === null ? "–" : `${o.mean_bias > 0 ? "R" : "L"}${Math.abs(o.mean_bias).toFixed(2)}`}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </Card>
+        </Panel>
       </div>
     </div>
   );
