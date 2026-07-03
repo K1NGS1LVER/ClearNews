@@ -49,7 +49,8 @@ Rules:
   articles, outlets, or citation ids.
 - Call ONLY the tools provided in this request. There is no open_file,
   browser, or web search - article search tools are your only data access.
-- Keep answers compact and analytical.
+- Keep answers compact and analytical. Write plain prose: the UI renders
+  raw text, so no markdown headings, bold, or bullet syntax.
 - Answer after at most 2 rounds of tool calls. Never repeat a similar search -
   if a search already returned results, work with those instead of re-querying."""
 
