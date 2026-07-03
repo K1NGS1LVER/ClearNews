@@ -54,13 +54,13 @@ export default function StoryAsk({
       {/* desktop layout spacer */}
       <div
         className="hidden shrink-0 md:block"
-        style={{ width: open ? 340 : 0, transition: "width .38s cubic-bezier(.4,0,.2,1)" }}
+        style={{ width: open ? 440 : 0, transition: "width .38s cubic-bezier(.4,0,.2,1)" }}
         aria-hidden
       />
 
       {/* the panel itself: mobile sheet (slides up) <-> desktop sidebar (slides in from the right) */}
       <div
-        className={`fixed inset-0 z-30 flex flex-col overflow-hidden transition-transform duration-[400ms] ease-[cubic-bezier(.16,1,.3,1)] md:inset-auto md:top-0 md:right-0 md:bottom-0 md:w-[340px] md:border-l md:[border-color:var(--border)] ${
+        className={`fixed inset-0 z-30 flex flex-col overflow-hidden transition-transform duration-[400ms] ease-[cubic-bezier(.16,1,.3,1)] md:inset-auto md:top-0 md:right-0 md:bottom-0 md:w-[440px] md:border-l md:[border-color:var(--border)] ${
           open ? "translate-y-0 md:translate-x-0" : "translate-y-full md:translate-x-full"
         }`}
         style={{
