@@ -1,27 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 :root {
-  /* dataviz reference palette, light mode */
+  /* editorial baseline tokens, light mode */
+  --font-serif: "Source Serif 4", serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
   --surface-1: #fcfcfb;
-  --page: #f9f9f7;
-  --ink: #0b0b0b;
+  --page: #f7f6f2;
+  --ink: #141310;
   --ink-2: #52514e;
-  --ink-muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
+  --ink-muted: #8b887f;
+  --grid: #ecebe4;
+  --baseline: #b3b0a3;
   --border: rgba(11, 11, 11, 0.1);
+  --hair: #ecebe4;
+  --rowline: #e3e1d6;
+  --input-border: #dedcd2;
 
   --bias-left: #2a78d6;
-  --bias-center: #e1e0d9;
-  --bias-right: #e34948;
+  --bias-center: #b3b0a3;
+  --bias-right: #d64540;
+  --chip-center-bg: #e9e7df;
+  --chip-center-ink: #52514e;
 
   --series-volume: #2a78d6;
   --series-sentiment: #1baf7a;
   --series-drift: #4a3aa7;
 
-  --status-active: #0ca30c;
-  --status-fading: #fab219;
-  --status-dead: #898781;
+  --status-active: #0a7a0a;
+  --status-fading: #a87700;
+  --status-dead: #a5a297;
+
+  --navpill: #141310;
+  --navpill-ink: #fcfcfb;
+  --glass: rgba(249, 248, 244, 0.72);
+  --thumb-a: #e7e5dd;
+  --thumb-b: #d7d4c9;
+  --card-shadow: rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme="dark"] {
+  --surface-1: #1d1b16;
+  --page: #161511;
+  --ink: #f2f0e8;
+  --ink-2: #c7c4b8;
+  --ink-muted: #8b887f;
+  --grid: #26241d;
+  --baseline: #6d6a5f;
+  --border: #26241d;
+  --hair: #26241d;
+  --rowline: #26241d;
+  --input-border: #34322a;
+
+  --bias-left: #5b96e8;
+  --bias-center: #6d6a5f;
+  --bias-right: #e06561;
+  --chip-center-bg: #2e2c25;
+  --chip-center-ink: #c7c4b8;
+
+  --series-volume: #5b96e8;
+  --series-sentiment: #33c896;
+  --series-drift: #7a68d6;
+
+  --status-active: #4fbf4f;
+  --status-fading: #dfae3a;
+  --status-dead: #6d6b60;
+
+  --navpill: #f2f0e8;
+  --navpill-ink: #161511;
+  --glass: rgba(22, 21, 17, 0.55);
+  --thumb-a: #2a281f;
+  --thumb-b: #34322a;
+  --card-shadow: rgba(0, 0, 0, 0.4);
 }
 
 body {
