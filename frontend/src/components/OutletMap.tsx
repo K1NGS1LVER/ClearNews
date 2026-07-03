@@ -17,7 +17,7 @@ const PAD = 30;
 // diverging blue -> gray -> red over bias score -0.5..+0.5
 const biasScale = scaleLinear<string>(
   [-0.5, 0, 0.5],
-  ["#2a78d6", "#c3c2b7", "#e34948"],
+  ["#2a78d6", "#b3b0a3", "#d64540"],
 ).clamp(true);
 
 /** Outlets positioned by the similarity of what they publish (UMAP of mean
@@ -72,10 +72,14 @@ export default function OutletMap() {
           </text>
         ))}
       </svg>
-      <div className="mt-1 flex items-center gap-3 text-xs" style={{ color: "var(--ink-2)" }}>
-        <span>lean:</span>
-        <span className="inline-block h-2 w-24 rounded-full" style={{ background: "linear-gradient(to right, #2a78d6, #c3c2b7, #e34948)" }} />
-        <span>left ↔ right · circle size = article volume · proximity = similar coverage</span>
+      <div
+        className="mt-1.5 flex flex-wrap items-center gap-2.5"
+        style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.04em", color: "var(--ink-muted)" }}
+      >
+        <span>LEFT</span>
+        <span className="inline-block h-1.5 w-20 rounded-full" style={{ background: "linear-gradient(to right, var(--bias-left), var(--baseline), var(--bias-right))" }} />
+        <span>RIGHT</span>
+        <span className="ml-2">SIZE = VOLUME</span>
       </div>
       {hover && (
         <div

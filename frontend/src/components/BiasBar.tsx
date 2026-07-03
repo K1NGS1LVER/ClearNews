@@ -15,7 +15,7 @@ export default function BiasBar({ left, center, right, showLabels }: Props) {
   return (
     <div>
       <div
-        className="flex h-2 w-full overflow-hidden rounded-full gap-[2px]"
+        className="flex h-1.5 w-full overflow-hidden rounded-[3px] gap-[1.5px]"
         role="img"
         aria-label={`Coverage lean: ${pct(l)} left, ${pct(c)} center, ${pct(r)} right`}
       >
@@ -24,10 +24,13 @@ export default function BiasBar({ left, center, right, showLabels }: Props) {
         <div style={{ flexGrow: r, background: "var(--bias-right)" }} />
       </div>
       {showLabels && (
-        <div className="mt-1 flex justify-between text-xs" style={{ color: "var(--ink-2)" }}>
-          <span>◀ {pct(l)} left</span>
-          <span>{pct(c)} center</span>
-          <span>{pct(r)} right ▶</span>
+        <div
+          className="mt-1.5 flex justify-between"
+          style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.04em", color: "var(--ink-muted)" }}
+        >
+          <span>◀ {pct(l)} LEFT</span>
+          <span>{pct(c)} CENTER</span>
+          <span>{pct(r)} RIGHT ▶</span>
         </div>
       )}
     </div>

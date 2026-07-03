@@ -74,11 +74,14 @@ export default function DriftMap({ storyId }: { storyId: number }) {
           />
         ))}
       </svg>
-      <div className="mt-1 flex items-center gap-4 text-xs" style={{ color: "var(--ink-2)" }}>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: "var(--bias-left)" }} /> left</span>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: "var(--baseline)" }} /> center</span>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: "var(--bias-right)" }} /> right</span>
-        <span><span className="mr-1 inline-block h-0.5 w-4 align-middle" style={{ background: "var(--series-drift)" }} /> daily centroid path</span>
+      <div
+        className="mt-1.5 flex flex-wrap items-center gap-4"
+        style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.04em", color: "var(--ink-muted)" }}
+      >
+        <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: "var(--bias-left)" }} /> LEFT</span>
+        <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: "var(--baseline)" }} /> CENTER</span>
+        <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: "var(--bias-right)" }} /> RIGHT</span>
+        <span><span className="mr-1.5 inline-block h-0.5 w-4 align-middle" style={{ background: "var(--series-drift)" }} /> DAILY CENTROID PATH</span>
       </div>
       {hover && (
         <div
