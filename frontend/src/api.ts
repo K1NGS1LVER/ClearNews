@@ -1,5 +1,14 @@
 const base = "/api";
 
+/** Some scraped titles carry un-decoded HTML entities (e.g. "&#x2013;").
+    A detached textarea decodes them without executing markup. */
+const decoder = typeof document !== "undefined" ? document.createElement("textarea") : null;
+export function decodeEntities(text: string): string {
+  if (!decoder || !text.includes("&")) return text;
+  decoder.innerHTML = text;
+  return decoder.value;
+}
+
 export type StoryCard = {
   id: number;
   title: string;
@@ -11,6 +20,7 @@ export type StoryCard = {
   bias_center_share: number | null;
   bias_right_share: number | null;
   daily_counts: number[];
+  image_url: string | null;
 };
 
 export type DailyMetric = {

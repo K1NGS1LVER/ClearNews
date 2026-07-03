@@ -61,6 +61,7 @@ class Article(Base):
     url: Mapped[str] = mapped_column(Text, unique=True, index=True)
     title: Mapped[str | None] = mapped_column(Text)
     content: Mapped[str | None] = mapped_column(Text)  # full text when fetched
+    image_url: Mapped[str | None] = mapped_column(Text)  # og:image, scraped alongside content
     source: Mapped[str] = mapped_column(String(16))  # gdelt | rss | newsapi
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     ingested_at: Mapped[datetime] = mapped_column(

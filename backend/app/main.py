@@ -48,6 +48,7 @@ class StoryCard(BaseModel):
     bias_center_share: float | None
     bias_right_share: float | None
     daily_counts: list[int]  # lifecycle sparkline
+    image_url: str | None
 
 
 class DailyMetric(BaseModel):
@@ -127,6 +128,9 @@ def list_stories(status: str | None = None, db: Session = Depends(get_db)):
             if total
             else None
         )
+        imaged = sorted(
+            (a for a in s.articles if a.image_url), key=lambda a: a.published_at, reverse=True
+        )
         cards.append(
             StoryCard(
                 id=s.id,
@@ -139,6 +143,7 @@ def list_stories(status: str | None = None, db: Session = Depends(get_db)):
                 bias_center_share=weight("bias_center_share"),
                 bias_right_share=weight("bias_right_share"),
                 daily_counts=[m.article_count for m in metrics],
+                image_url=imaged[0].image_url if imaged else None,
             )
         )
     cards.sort(key=lambda c: c.article_count, reverse=True)
