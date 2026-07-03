@@ -4,6 +4,7 @@ Run: uv run uvicorn app.main:app --reload
 """
 
 import json
+import threading
 from contextlib import asynccontextmanager
 from datetime import date
 
@@ -21,8 +22,10 @@ async def lifespan(_: FastAPI):
     # this process loads torch (search, agent) and sklearn (drift PCA);
     # two bundled OpenMP runtimes would segfault it under load
     from pipeline.scheduler import check_single_openmp
+    from pipeline.nlp import _embedder
 
     check_single_openmp()
+    threading.Thread(target=_embedder, daemon=True).start()
     yield
 
 
