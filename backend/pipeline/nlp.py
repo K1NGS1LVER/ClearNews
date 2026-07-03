@@ -11,6 +11,7 @@ falling back to `title`.
 # swap point is `_text_of` only.
 
 import sys
+import threading
 from functools import lru_cache
 
 import torch
@@ -24,12 +25,27 @@ BIAS_MODEL = "bucketresearch/politicalBiasBERT"
 BIAS_LABELS = ["left", "center", "right"]
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
+_embedder_lock = threading.Lock()
+_embedder_instance = None
 
-@lru_cache(maxsize=1)
-def _embedder():
+
+def _load_embed_model():
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(EMBED_MODEL)
+
+
+def _embedder(loader=_load_embed_model):
+    # ponytail: lru_cache doesn't dedupe concurrent misses, so the startup
+    # warm thread and a first search request could both load the ~9s model.
+    # Lock around construction, cache on a module var, check twice.
+    global _embedder_instance
+    if _embedder_instance is not None:
+        return _embedder_instance
+    with _embedder_lock:
+        if _embedder_instance is None:
+            _embedder_instance = loader()
+    return _embedder_instance
 
 
 @lru_cache(maxsize=1)

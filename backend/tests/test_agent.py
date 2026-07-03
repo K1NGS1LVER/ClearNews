@@ -106,6 +106,28 @@ def test_answer_does_not_trigger_fallback(monkeypatch):
     assert all(e["type"] != "error" for e in events)
 
 
+def test_recursion_error_after_tokens_says_cut_short(monkeypatch):
+    """If tokens already reached the client before a GraphRecursionError,
+    the no-coverage message would be misleading (some answer did arrive).
+    stream_chat must send a "cut short" error instead."""
+
+    async def fake_stream_once(_agent, _state):
+        yield {"type": "token", "content": "Partial answer"}
+        raise GraphRecursionError("Recursion limit reached")
+
+    monkeypatch.setattr(chat_mod, "build_agent", lambda _sid: object())
+    monkeypatch.setattr(chat_mod, "_stream_once", fake_stream_once)
+
+    async def collect():
+        return [ev async for ev in stream_chat([{"role": "user", "content": "x"}], None)]
+
+    events = asyncio.run(collect())
+
+    assert events[-1]["type"] == "error"
+    assert "cut short" in events[-1]["message"]
+    assert "relevant coverage" not in events[-1]["message"]
+
+
 def test_collect_sources_dedupes():
     src = {"article_id": 1, "url": "http://x", "title": "t"}
     msgs = [

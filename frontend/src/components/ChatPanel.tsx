@@ -73,7 +73,7 @@ export default function ChatPanel({ storyId }: { storyId?: number }) {
             answer = answer ? `${answer}\n\n${data.message}` : data.message;
             setMessages((ms) => [
               ...ms.slice(0, -1),
-              { role: "assistant", content: answer },
+              { ...ms[ms.length - 1], content: answer },
             ]);
           } else if (data.type === "sources") {
             setMessages((ms) => [

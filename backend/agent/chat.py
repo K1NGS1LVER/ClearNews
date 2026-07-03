@@ -153,17 +153,26 @@ async def stream_chat(messages: list[dict], story_id: int | None, retries: int =
             return
         except GraphRecursionError:
             print("chat agent hit recursion limit (runaway tool loop)")
-            yield {"type": "error", "message": NO_COVERAGE_MESSAGE}
+            if emitted:
+                message = "The answer was cut short. Please try again."
+            else:
+                message = NO_COVERAGE_MESSAGE
+            yield {"type": "error", "message": message}
             return
         except APIError as exc:
             if emitted or attempt == retries:
-                if "rate_limit" in str(exc) or "too large" in str(exc).lower():
+                exc_str = str(exc)
+                if "rate_limit" in exc_str or "too large" in exc_str.lower():
                     message = (
                         "Hit the free-tier rate limit on the model provider. "
                         "Wait a minute and try again."
                     )
-                else:
+                elif "not in request.tools" in exc_str or (
+                    "tool" in exc_str.lower() and "not in request" in exc_str.lower()
+                ):
                     message = "The model produced an invalid tool call. Please try again."
+                else:
+                    message = "The model provider returned an error. Please try again."
                 yield {"type": "error", "message": message}
                 print(f"chat agent APIError (attempt {attempt + 1}): {exc}")
                 return

@@ -1,6 +1,35 @@
 """NLP unit checks. First run downloads models (~600MB), then cached."""
 
+import threading
+
+import pipeline.nlp as nlp_mod
 from pipeline.nlp import BIAS_LABELS, extract_entities, score_bias
+
+
+def test_embedder_loads_once_under_concurrent_callers(monkeypatch):
+    """The startup warm thread and a first search request can both call
+    _embedder() before either finishes loading. The lock + module-level
+    cache must ensure the (slow) loader runs exactly once."""
+    calls = []
+
+    def fake_loader():
+        calls.append(1)
+        return object()
+
+    monkeypatch.setattr(nlp_mod, "_embedder_instance", None)
+
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(nlp_mod._embedder(fake_loader)))
+        for _ in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(calls) == 1
+    assert len({id(r) for r in results}) == 1
 
 
 def test_score_bias_known_leans():
