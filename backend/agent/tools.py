@@ -48,7 +48,7 @@ def make_search_story(story_id: int):
         """Search this story's articles by meaning. Returns matching articles
         with article_id, title, url, outlet, date, bias label and sentiment.
         Cite articles as [article_id]."""
-        return _semantic_search(query, story_id, limit=8)
+        return _semantic_search(query, story_id, limit=5)
 
     return search_story
 
@@ -58,7 +58,7 @@ def search_corpus(query: str) -> list[dict]:
     """Semantic search across ALL news articles in the archive. Returns
     matching articles with article_id, title, url, outlet, date, bias label
     and sentiment. Cite articles as [article_id]."""
-    return _semantic_search(query, None, limit=8)
+    return _semantic_search(query, None, limit=5)
 
 
 @tool

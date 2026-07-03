@@ -18,6 +18,7 @@ from langgraph.prebuilt import create_react_agent
 from agent.tools import get_story_arc, list_stories, make_search_story, search_corpus
 
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+SUGGEST_MODEL = os.getenv("SUGGEST_MODEL", "llama-3.1-8b-instant")
 
 # Cap the ReAct tool loop. When retrieval turns up nothing on-topic, the model
 # keeps re-searching instead of answering; without a cap it runs to LangGraph's
@@ -48,14 +49,23 @@ Rules:
   articles, outlets, or citation ids.
 - Call ONLY the tools provided in this request. There is no open_file,
   browser, or web search - article search tools are your only data access.
-- Keep answers compact and analytical."""
+- Keep answers compact and analytical.
+- Answer after at most 2 rounds of tool calls. Never repeat a similar search -
+  if a search already returned results, work with those instead of re-querying."""
 
 
 @lru_cache(maxsize=1)
 def _llm():
     from langchain_groq import ChatGroq
 
-    return ChatGroq(model=MODEL, temperature=0.2)
+    return ChatGroq(model=MODEL, temperature=0.2, reasoning_effort="low")
+
+
+@lru_cache(maxsize=1)
+def _suggest_llm():
+    from langchain_groq import ChatGroq
+
+    return ChatGroq(model=SUGGEST_MODEL, temperature=0.2)
 
 
 def build_agent(story_id: int | None):
@@ -69,7 +79,12 @@ def build_agent(story_id: int | None):
         )
     else:
         tools = [search_corpus, list_stories, get_story_arc]
-        prompt = SYSTEM
+        prompt = (
+            SYSTEM
+            + "\n\nYour tools are search_corpus (whole-archive search), "
+            "list_stories (biggest tracked stories) and get_story_arc "
+            "(a story's coverage lifecycle)."
+        )
     return create_react_agent(_llm(), tools, prompt=prompt)
 
 
@@ -91,18 +106,16 @@ def _collect_sources(messages) -> list[dict]:
 
 
 async def _stream_once(agent, state):
-    final_messages = []
-    async for event, chunk in agent.astream(
-        state, {"recursion_limit": RECURSION_LIMIT}, stream_mode=["messages", "values"]
+    tool_messages = []
+    async for msg, _meta in agent.astream(
+        state, {"recursion_limit": RECURSION_LIMIT}, stream_mode="messages"
     ):
-        if event == "messages":
-            msg, _meta = chunk
-            if isinstance(msg, AIMessageChunk) and msg.content:
-                yield {"type": "token", "content": msg.content}
-        else:  # values: full state snapshots; keep the last one
-            final_messages = chunk["messages"]
+        if isinstance(msg, AIMessageChunk) and msg.content:
+            yield {"type": "token", "content": msg.content}
+        elif isinstance(msg, ToolMessage):
+            tool_messages.append(msg)
 
-    yield {"type": "sources", "sources": _collect_sources(final_messages)}
+    yield {"type": "sources", "sources": _collect_sources(tool_messages)}
 
 
 async def stream_chat(messages: list[dict], story_id: int | None, retries: int = 1):
@@ -158,7 +171,7 @@ async def stream_chat(messages: list[dict], story_id: int | None, retries: int =
 
 def suggest_questions(context: str) -> list[str]:
     """Three follow-up questions for the given story/answer context."""
-    resp = _llm().invoke(
+    resp = _suggest_llm().invoke(
         [
             (
                 "system",
