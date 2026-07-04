@@ -69,9 +69,78 @@ async function get<T>(path: string): Promise<T> {
   return resp.json();
 }
 
+async function send<T>(method: "POST" | "PUT", path: string, body?: unknown): Promise<T> {
+  const resp = await fetch(base + path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => null);
+    throw new Error(detail?.detail || `${resp.status} ${path}`);
+  }
+  return resp.json();
+}
+
 export const fetchStories = () => get<StoryCard[]>("/stories");
 export const fetchArc = (id: number) => get<StoryArc>(`/stories/${id}/arc`);
 export const fetchOutlets = (id: number) =>
   get<OutletRow[]>(`/stories/${id}/outlets`);
 export const fetchSearch = (q: string) =>
   get<ArticleOut[]>(`/search?q=${encodeURIComponent(q)}`);
+
+export const CATEGORIES = [
+  "politics",
+  "conflict",
+  "disaster",
+  "crime",
+  "health",
+  "economy",
+  "sports",
+  "science_tech",
+  "culture",
+] as const;
+export type Category = (typeof CATEGORIES)[number];
+
+export type BiasPref = "balanced" | "everything" | "challenge";
+
+export type Me = {
+  id: number;
+  email: string;
+  display_name: string;
+  favourite_category: Category | null;
+  categories: Category[];
+  bias_pref: BiasPref;
+  keywords: string[];
+};
+
+export type ForYouCard = StoryCard & {
+  category: Category | null;
+  size: "hero" | "standard" | "compact";
+  matched: string[];
+};
+
+export async function fetchMe(): Promise<Me | null> {
+  const resp = await fetch(base + "/me");
+  if (resp.status === 401) return null;
+  if (!resp.ok) throw new Error(`${resp.status} /me`);
+  return resp.json();
+}
+
+export const signup = (email: string, password: string, display_name: string) =>
+  send<Me>("POST", "/auth/signup", { email, password, display_name });
+
+export const login = (email: string, password: string) =>
+  send<Me>("POST", "/auth/login", { email, password });
+
+export const logout = () => send<{ ok: boolean }>("POST", "/auth/logout");
+
+export const putPreferences = (prefs: {
+  display_name?: string;
+  favourite_category: string | null;
+  categories: string[];
+  bias_pref: BiasPref;
+  keywords: string[];
+}) => send<Me>("PUT", "/me/preferences", prefs);
+
+export const fetchForYou = () => get<ForYouCard[]>("/foryou");
