@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -21,6 +22,8 @@ import StoryAsk from "../components/StoryAsk";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
+
+const COVERAGE_PAGE_SIZE = 15;
 
 const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false } as const;
 const grid = <CartesianGrid stroke="var(--grid)" vertical={false} />;
@@ -60,6 +63,7 @@ function NeedsMoreDays() {
 
 export default function Story() {
   const id = Number(useParams().id);
+  const [coverageExpanded, setCoverageExpanded] = useState(false);
   const { data: arc } = useQuery({ queryKey: ["arc", id], queryFn: () => fetchArc(id) });
   const { data: outlets } = useQuery({
     queryKey: ["outlets", id],
@@ -134,7 +138,7 @@ export default function Story() {
         <div className="flex flex-col gap-4">
           <Panel title={`The coverage — ${arc.articles.length} articles`} hint="NEWEST FIRST">
             <ul className="flex flex-col">
-              {arc.articles.map((a, i) => (
+              {(coverageExpanded ? arc.articles : arc.articles.slice(0, COVERAGE_PAGE_SIZE)).map((a, i) => (
                 <li
                   key={a.id}
                   className="flex items-center gap-3 py-2.5"
@@ -150,6 +154,20 @@ export default function Story() {
                 </li>
               ))}
             </ul>
+            {arc.articles.length > COVERAGE_PAGE_SIZE && (
+              <button
+                type="button"
+                onClick={() => setCoverageExpanded((v) => !v)}
+                className="coverage-toggle mt-2 flex w-full items-center justify-center gap-1.5 border-t py-2.5 hover:opacity-70"
+                style={{ ...mono, fontSize: 10, letterSpacing: "0.08em", color: "var(--ink-muted)", borderColor: "var(--hair)" }}
+              >
+                {coverageExpanded ? (
+                  <>SHOW FEWER <span className="coverage-toggle-arrow">▲</span></>
+                ) : (
+                  <>SHOW {arc.articles.length - COVERAGE_PAGE_SIZE} MORE <span className="coverage-toggle-arrow">▼</span></>
+                )}
+              </button>
+            )}
           </Panel>
 
           <Panel title="Lifecycle — coverage volume" hint="HOLLOW BARS = FORECAST">
