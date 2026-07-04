@@ -1,37 +1,31 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { logout } from "./api";
+import { useMe } from "./auth";
 import Analytics from "./pages/Analytics";
 import Article from "./pages/Article";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
+import ForYou from "./pages/ForYou";
+import Landing from "./pages/Landing";
 import Latest from "./pages/Latest";
+import Login from "./pages/Login";
 import Search from "./pages/Search";
+import Signup from "./pages/Signup";
 import Story from "./pages/Story";
+import Welcome from "./pages/Welcome";
+import { useTheme } from "./theme";
 
-type Theme = "light" | "dark";
-
-function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
-  return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
-}
-
-const navItems = [
-  { to: "/", label: "Stories", icon: "●", end: true },
+const baseNavItems = [
+  { to: "/stories", label: "Stories", icon: "●", end: true },
   { to: "/latest", label: "Latest", icon: "≡", end: false },
   { to: "/search", label: "Search", icon: "⌕", end: false },
   { to: "/analytics", label: "Data", icon: "◔", end: false },
   { to: "/chat", label: "Ask", icon: "✦", end: false },
 ];
+
+const forYouItem = { to: "/foryou", label: "For You", icon: "★", end: false };
 
 const pillStyle = ({ isActive }: { isActive: boolean }) => ({
   padding: "5px 11px",
@@ -41,8 +35,44 @@ const pillStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? "var(--navpill-ink)" : "var(--ink-2)",
 });
 
+/** Signed-in users land on their personalized feed; signed-out users see the landing page. */
+function Root() {
+  const { data: me, isLoading } = useMe();
+  if (isLoading) return null;
+  if (me) return <Navigate to="/foryou" replace />;
+  return <Landing />;
+}
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { data: me, isLoading } = useMe();
+  if (isLoading) return null;
+  if (!me) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   const [theme, toggleTheme] = useTheme();
+  const { pathname } = useLocation();
+  const { data: me } = useMe();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const hideShell = pathname === "/" && !me;
+  if (hideShell) {
+    return (
+      <Routes>
+        <Route path="/" element={<Root />} />
+      </Routes>
+    );
+  }
+
+  async function onLogout() {
+    await logout();
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
+    navigate("/");
+  }
+
+  const navItems = me ? [forYouItem, ...baseNavItems] : baseNavItems;
 
   return (
     <>
@@ -78,6 +108,37 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
+          {me ? (
+            <div className="ml-2 hidden items-center gap-2 md:flex">
+              <span
+                className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold"
+                style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
+                title={me.display_name}
+              >
+                {me.display_name.charAt(0).toUpperCase()}
+              </span>
+              <button
+                onClick={onLogout}
+                className="cursor-pointer"
+                style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}
+              >
+                LOG OUT
+              </button>
+            </div>
+          ) : (
+            <div className="ml-2 hidden items-center gap-2 md:flex">
+              <Link to="/login" style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>
+                Log in
+              </Link>
+              <Link
+                to="/signup"
+                className="rounded-lg px-3 py-1.5 text-sm font-semibold"
+                style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
+              >
+                Sign up
+              </Link>
+            </div>
+          )}
           <button
             onClick={toggleTheme}
             className="ml-2 cursor-pointer md:ml-2"
@@ -100,13 +161,32 @@ export default function App() {
 
       <main className="pb-16 md:pb-0">
         <Routes>
-          <Route path="/" element={<Feed />} />
+          <Route path="/" element={<Root />} />
+          <Route path="/stories" element={<Feed />} />
           <Route path="/story/:id" element={<Story />} />
           <Route path="/article/:id" element={<Article />} />
           <Route path="/latest" element={<Latest />} />
           <Route path="/search" element={<Search />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/welcome"
+            element={
+              <RequireAuth>
+                <Welcome />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/foryou"
+            element={
+              <RequireAuth>
+                <ForYou />
+              </RequireAuth>
+            }
+          />
         </Routes>
       </main>
 
