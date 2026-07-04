@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
-from app.models import Article, Outlet, Story
+from app.auth import current_user
+from app.auth import router as auth_router
+from app.db import get_db
+from app.models import Article, Outlet, Story, User
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -30,11 +32,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ClearNews API", lifespan=lifespan)
-
-
-def get_db():
-    with SessionLocal() as session:
-        yield session
+app.include_router(auth_router)
 
 
 class StoryCard(BaseModel):
@@ -109,6 +107,35 @@ def _article_out(a: Article) -> ArticleOut:
     )
 
 
+def _story_card(s: Story) -> StoryCard | None:
+    metrics = sorted(s.daily_metrics, key=lambda m: m.day)
+    if not metrics:
+        return None
+    total = sum(m.article_count for m in metrics)
+    # bias shares weighted by daily volume
+    weight = lambda attr: (
+        sum((getattr(m, attr) or 0) * m.article_count for m in metrics) / total
+        if total
+        else None
+    )
+    imaged = sorted(
+        (a for a in s.articles if a.image_url), key=lambda a: a.published_at, reverse=True
+    )
+    return StoryCard(
+        id=s.id,
+        title=s.title,
+        status=s.status,
+        first_seen=s.first_seen.date(),
+        last_seen=s.last_seen.date(),
+        article_count=total,
+        bias_left_share=weight("bias_left_share"),
+        bias_center_share=weight("bias_center_share"),
+        bias_right_share=weight("bias_right_share"),
+        daily_counts=[m.article_count for m in metrics],
+        image_url=imaged[0].image_url if imaged else None,
+    )
+
+
 @app.get("/api/stories", response_model=list[StoryCard])
 def list_stories(status: str | None = None, db: Session = Depends(get_db)):
     q = select(Story)
@@ -116,37 +143,131 @@ def list_stories(status: str | None = None, db: Session = Depends(get_db)):
         q = q.where(Story.status == status)
     stories = db.execute(q.order_by(Story.last_seen.desc())).scalars().all()
 
-    cards = []
+    cards = [c for s in stories if (c := _story_card(s)) is not None]
+    cards.sort(key=lambda c: c.article_count, reverse=True)
+    return cards
+
+
+class ForYouCard(StoryCard):
+    category: str | None
+    size: str  # hero | standard | compact
+    matched: list[str]
+
+
+def score_story(
+    *,
+    category: str | None,
+    status: str,
+    days_since_seen: float,
+    bias_left_share: float | None,
+    bias_right_share: float | None,
+    haystack: str,
+    favourite_category: str | None,
+    categories: list[str],
+    keywords: list[str],
+    bias_pref: str,
+) -> tuple[float, list[str]]:
+    """Pure ranking score for a story card given a user's preferences.
+
+    Returns (score, matched_keywords).
+    """
+    score = 0.0
+    if category and category == favourite_category:
+        score += 3.0
+    elif category and category in categories:
+        score += 1.5
+
+    matched = [kw for kw in keywords if kw.lower() in haystack]
+    score += min(2.0, 1.0 * len(matched))
+
+    score += 2.0 / (1 + max(days_since_seen, 0))
+
+    if status == "active":
+        score += 0.5
+
+    left = bias_left_share or 0.0
+    right = bias_right_share or 0.0
+    skew = abs(left - right)
+    if bias_pref == "balanced":
+        score += 0.75 * (1 - skew)
+    elif bias_pref == "challenge":
+        score += 0.75 * skew
+    # "everything": no bias adjustment
+
+    return score, matched
+
+
+@app.get("/api/foryou", response_model=list[ForYouCard])
+def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    stories = db.execute(select(Story)).scalars().all()
+
+    favourite_category = user.favourite_category
+    categories = user.categories or []
+    keywords = [k.lower() for k in (user.keywords or [])]
+    bias_pref = user.bias_pref
+
+    scored: list[tuple[float, list[str], Story, StoryCard]] = []
     for s in stories:
-        metrics = sorted(s.daily_metrics, key=lambda m: m.day)
-        if not metrics:
+        card = _story_card(s)
+        if card is None:
             continue
-        total = sum(m.article_count for m in metrics)
-        # bias shares weighted by daily volume
-        weight = lambda attr: (
-            sum((getattr(m, attr) or 0) * m.article_count for m in metrics) / total
-            if total
-            else None
+        haystack_parts = [s.title.lower()]
+        for a in s.articles:
+            if a.entities:
+                haystack_parts.append(json.dumps(a.entities).lower())
+            if a.themes:
+                haystack_parts.append(json.dumps(a.themes).lower())
+        haystack = " ".join(haystack_parts)
+        days_since_seen = (now - s.last_seen).total_seconds() / 86400.0
+
+        score, matched = score_story(
+            category=s.category,
+            status=s.status,
+            days_since_seen=days_since_seen,
+            bias_left_share=card.bias_left_share,
+            bias_right_share=card.bias_right_share,
+            haystack=haystack,
+            favourite_category=favourite_category,
+            categories=categories,
+            keywords=keywords,
+            bias_pref=bias_pref,
         )
-        imaged = sorted(
-            (a for a in s.articles if a.image_url), key=lambda a: a.published_at, reverse=True
-        )
+        scored.append((score, matched, s, card))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    followed = set(categories)
+    top = scored[:25]
+    top_ids = {s.id for _, _, s, _ in top}
+    # ponytail: fixed 25+5 blend, tune if bubbly
+    outside = [t for t in scored if t[2].id not in top_ids and t[2].category not in followed][:5]
+    blended = top + outside
+
+    cards = []
+    best_favourite_id = None
+    if favourite_category:
+        favourite_hits = [t for t in blended if t[2].category == favourite_category]
+        if favourite_hits:
+            best_favourite_id = max(favourite_hits, key=lambda t: t[0])[2].id
+
+    for score, matched, s, card in blended:
+        if s.id == best_favourite_id or score >= 3.5:
+            size = "hero"
+        elif score >= 1.5:
+            size = "standard"
+        else:
+            size = "compact"
         cards.append(
-            StoryCard(
-                id=s.id,
-                title=s.title,
-                status=s.status,
-                first_seen=s.first_seen.date(),
-                last_seen=s.last_seen.date(),
-                article_count=total,
-                bias_left_share=weight("bias_left_share"),
-                bias_center_share=weight("bias_center_share"),
-                bias_right_share=weight("bias_right_share"),
-                daily_counts=[m.article_count for m in metrics],
-                image_url=imaged[0].image_url if imaged else None,
+            ForYouCard(
+                **card.model_dump(),
+                category=s.category,
+                size=size,
+                matched=matched,
             )
         )
-    cards.sort(key=lambda c: c.article_count, reverse=True)
     return cards
 
 

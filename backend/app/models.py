@@ -103,3 +103,36 @@ class StoryDailyMetric(Base):
     bias_right_share: Mapped[float | None] = mapped_column(Float)
 
     story: Mapped[Story] = relationship(back_populates="daily_metrics")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str] = mapped_column(String(120))
+
+    favourite_category: Mapped[str | None] = mapped_column(String(64))
+    categories: Mapped[list | None] = mapped_column(JSONB, default=list)
+    bias_pref: Mapped[str] = mapped_column(String(16), default="balanced")  # balanced | everything | challenge
+    keywords: Mapped[list | None] = mapped_column(JSONB, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    sessions: Mapped[list["UserSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserSession(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="sessions")
