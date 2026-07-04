@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("BiasBar", () => {
   test("bias bar renders on story cards in feed", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();
@@ -15,7 +15,7 @@ test.describe("BiasBar", () => {
   });
 
   test("bias bar shows BiasBar component on story detail page", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();
@@ -34,7 +34,7 @@ test.describe("BiasBar", () => {
 
 test.describe("Sparkline", () => {
   test("sparkline renders on story cards", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const svg = page.locator("svg", { hasText: /article|count|\d+/ }).first();
@@ -53,7 +53,7 @@ test.describe("Sparkline", () => {
 
 test.describe("DriftMap", () => {
   test("drift section renders on story detail page", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();
@@ -71,7 +71,7 @@ test.describe("DriftMap", () => {
 
 test.describe("StoryAsk", () => {
   test("StoryAsk button appears on story detail page", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();

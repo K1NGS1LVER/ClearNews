@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Feed - /", () => {
+test.describe("Feed - /stories", () => {
   test("shows story list when data is present", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const loading = page.locator("text=Loading stories");
@@ -21,7 +21,7 @@ test.describe("Feed - /", () => {
   });
 
   test("story cards show status and bias when available", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const firstCard = page.locator('a[href^="/story/"]').first();
@@ -33,7 +33,7 @@ test.describe("Feed - /", () => {
 
 test.describe("Story detail - /story/:id", () => {
   test("navigates from feed to story detail", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const firstCard = page.locator('a[href^="/story/"]').first();
@@ -47,7 +47,7 @@ test.describe("Story detail - /story/:id", () => {
   });
 
   test("shows article list and data panels on story page", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const firstCard = page.locator('a[href^="/story/"]').first();
@@ -65,7 +65,7 @@ test.describe("Story detail - /story/:id", () => {
 
 test.describe("Article - /article/:id", () => {
   test("navigates from story to article detail", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();
@@ -81,7 +81,7 @@ test.describe("Article - /article/:id", () => {
   });
 
   test("shows article metadata (outlet, date, bias, sentiment)", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();

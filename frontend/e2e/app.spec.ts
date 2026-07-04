@@ -2,12 +2,12 @@ import { test, expect } from "@playwright/test";
 
 test.describe("App shell", () => {
   test("page has correct title and heading", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     await expect(page.locator("text=ClearNews")).toBeVisible();
   });
 
   test("theme toggle switches between dark and light", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     const toggle = page.locator("button", { hasText: /LIGHT|DARK/ });
     await expect(toggle).toBeVisible();
 
@@ -22,7 +22,7 @@ test.describe("App shell", () => {
   });
 
   test("theme persists across navigation", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
     const toggle = page.locator("button", { hasText: /LIGHT|DARK/ });
     await toggle.click();
     const theme = await page.locator("html").getAttribute("data-theme");

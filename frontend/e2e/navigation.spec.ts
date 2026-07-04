@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const navLinks = [
-  { label: "Stories", path: "/" },
+  { label: "Stories", path: "/stories" },
   { label: "Latest", path: "/latest" },
   { label: "Search", path: "/search" },
   { label: "Data", path: "/analytics" },
@@ -10,19 +10,19 @@ const navLinks = [
 
 test.describe("Navigation", () => {
   test("all nav links are visible and navigate correctly", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/stories");
 
     for (const link of navLinks) {
       const navBtn = page.getByRole("link", { name: link.label, exact: true });
       await expect(navBtn).toBeVisible();
       await navBtn.click();
-      await expect(page).toHaveURL(link.path === "/" ? "/" : new RegExp(link.path));
+      await expect(page).toHaveURL(new RegExp(link.path));
     }
   });
 
   test("mobile bottom nav shows all links", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("/");
+    await page.goto("/stories");
 
     for (const link of navLinks) {
       const navBtn = page.locator(".fixed nav a, [class*='fixed'] a", { hasText: link.label.toUpperCase() }).first();
