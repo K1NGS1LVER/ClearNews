@@ -21,3 +21,6 @@ frontend/test-results/
 # Data
 backend/data/
 backend/pipeline/data/
+
+# mac os ds store
+.DS_Store
