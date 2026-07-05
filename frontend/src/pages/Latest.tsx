@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { decodeEntities, type ArticleOut } from "../api";
+import Loading from "../components/Loading";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
@@ -31,7 +32,7 @@ export default function Latest() {
   });
 
   if (isLoading)
-    return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading latest news…</p>;
+    return <Loading label="Loading latest news…" />;
 
   const days: { day: string; items: ArticleOut[] }[] = [];
   for (const a of articles ?? []) {

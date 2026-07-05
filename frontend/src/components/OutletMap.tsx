@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { scaleLinear, scaleSqrt } from "d3";
 import { useState } from "react";
+import Loading from "./Loading";
 
 type OutletPoint = {
   domain: string;
@@ -29,7 +30,7 @@ export default function OutletMap() {
   });
   const [hover, setHover] = useState<OutletPoint | null>(null);
 
-  if (!data) return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>Loading map…</p>;
+  if (!data) return <Loading label="Loading map…" compact />;
   if (data.outlets.length < 2)
     return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>Not enough outlets yet.</p>;
 

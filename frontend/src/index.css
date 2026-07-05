@@ -98,6 +98,27 @@ body {
   from { opacity: 0; transform: translateY(14px); }
 }
 
+@keyframes cn-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--ink-muted) 75%, transparent) 20deg,
+    color-mix(in srgb, var(--ink-muted) 75%, transparent) 140deg,
+    transparent 160deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px));
+  animation: cn-spin 2.5s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cn-anim { animation: none !important; }
 }

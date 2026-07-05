@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { decodeEntities } from "../api";
 import BiasBar from "../components/BiasBar";
+import Loading from "../components/Loading";
 import OutletMap from "../components/OutletMap";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
@@ -50,7 +51,7 @@ export default function Analytics() {
     queryKey: ["analytics"],
     queryFn: () => fetch("/api/analytics").then((r) => r.json()),
   });
-  if (!data) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading…</p>;
+  if (!data) return <Loading />;
 
   const bias = data.articles_by_bias;
   const totalBias = (bias.left ?? 0) + (bias.center ?? 0) + (bias.right ?? 0) || 1;

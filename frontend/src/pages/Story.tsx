@@ -18,6 +18,7 @@ import {
 import { decodeEntities, fetchArc, fetchOutlets } from "../api";
 import BiasBar from "../components/BiasBar";
 import DriftMap from "../components/DriftMap";
+import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
@@ -70,7 +71,7 @@ export default function Story() {
     queryFn: () => fetchOutlets(id),
   });
 
-  if (!arc) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading…</p>;
+  if (!arc) return <Loading />;
 
   const volumeData = [
     ...arc.metrics.map((m) => ({ day: m.day, article_count: m.article_count })),

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { decodeEntities, type ArticleOut } from "../api";
+import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
 
 type ArticleDetail = ArticleOut & {
@@ -28,7 +29,7 @@ export default function Article() {
   });
 
   if (isLoading)
-    return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Fetching article…</p>;
+    return <Loading label="Fetching article…" />;
   if (!a) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Article not found.</p>;
 
   const content = (

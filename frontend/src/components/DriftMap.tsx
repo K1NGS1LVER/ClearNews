@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { scaleLinear } from "d3";
 import { useState } from "react";
+import Loading from "./Loading";
 
 type DriftPoint = {
   article_id: number;
@@ -30,7 +31,7 @@ export default function DriftMap({ storyId }: { storyId: number }) {
   });
   const [hover, setHover] = useState<DriftPoint | null>(null);
 
-  if (!data) return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>Loading map…</p>;
+  if (!data) return <Loading label="Loading map…" compact />;
   if (data.points.length < 2)
     return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>Not enough articles to map.</p>;
 

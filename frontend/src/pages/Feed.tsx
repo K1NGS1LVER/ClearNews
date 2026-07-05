@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { decodeEntities, fetchStories } from "../api";
+import Loading from "../components/Loading";
 import Sparkline from "../components/Sparkline";
 import { LeanBar, MetaLine, Thumb } from "../components/StoryBits";
 
@@ -10,7 +11,7 @@ export default function Feed() {
     queryFn: fetchStories,
   });
 
-  if (isLoading) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading stories…</p>;
+  if (isLoading) return <Loading label="Loading stories…" />;
   if (error) return <p className="p-8 text-red-700">Failed to load stories.</p>;
 
   const liveCount = stories?.filter((s) => s.status !== "dead").length ?? 0;

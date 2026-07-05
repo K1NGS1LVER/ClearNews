@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { decodeEntities, fetchForYou, type ForYouCard } from "../api";
 import { useMe } from "../auth";
+import Loading from "../components/Loading";
 import Sparkline from "../components/Sparkline";
 import { LeanBar, MetaLine, Thumb } from "../components/StoryBits";
 
@@ -110,7 +111,7 @@ export default function ForYou() {
     queryFn: fetchForYou,
   });
 
-  if (isLoading) return <p className="p-8" style={{ color: "var(--ink-muted)" }}>Loading your feed…</p>;
+  if (isLoading) return <Loading label="Loading your feed…" />;
   if (error) return <p className="p-8 text-red-700">Failed to load your feed.</p>;
 
   const columns: ForYouCard[][] = Array.from({ length: columnCount }, (_, i) =>

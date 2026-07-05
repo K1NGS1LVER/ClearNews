@@ -7,6 +7,7 @@ import Analytics from "./pages/Analytics";
 import Article from "./pages/Article";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
+import Loading from "./components/Loading";
 import ForYou from "./pages/ForYou";
 import Landing from "./pages/Landing";
 import Latest from "./pages/Latest";
@@ -38,14 +39,14 @@ const pillStyle = ({ isActive }: { isActive: boolean }) => ({
 /** Signed-in users land on their personalized feed; signed-out users see the landing page. */
 function Root() {
   const { data: me, isLoading } = useMe();
-  if (isLoading) return null;
+  if (isLoading) return <Loading />;
   if (me) return <Navigate to="/foryou" replace />;
   return <Landing />;
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { data: me, isLoading } = useMe();
-  if (isLoading) return null;
+  if (isLoading) return <Loading />;
   if (!me) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
