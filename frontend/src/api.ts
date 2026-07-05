@@ -63,6 +63,39 @@ export type OutletRow = {
   outlet_overall_bias: number | null;
 };
 
+export type BiasLabel = "left" | "center" | "right";
+
+export type ExplanationArticle = {
+  id: number;
+  title: string | null;
+  outlet: string;
+  bias_label: BiasLabel | null;
+  explained: boolean;
+  probs: Record<BiasLabel, number> | null;
+  predicted: BiasLabel | null;
+  tokens: string[] | null;
+  values: [number, number, number][] | null;
+};
+
+export type TopWord = { word: string; value: number; articles: number };
+
+export type ExplanationAggregate = {
+  label_counts: Partial<Record<BiasLabel, number>>;
+  probs: Record<BiasLabel, number>;
+  top_words: Record<BiasLabel, TopWord[]>;
+};
+
+export type StoryExplanation = {
+  status: "none" | "partial" | "complete";
+  eligible: number;
+  total: number;
+  analyzed: number;
+  as_of: string | null;
+  stale: boolean;
+  articles: ExplanationArticle[];
+  aggregate: ExplanationAggregate | null;
+};
+
 async function get<T>(path: string): Promise<T> {
   const resp = await fetch(base + path);
   if (!resp.ok) throw new Error(`${resp.status} ${path}`);
@@ -144,3 +177,8 @@ export const putPreferences = (prefs: {
 }) => send<Me>("PUT", "/me/preferences", prefs);
 
 export const fetchForYou = () => get<ForYouCard[]>("/foryou");
+
+export const fetchStoryExplanation = (id: number) =>
+  get<StoryExplanation>(`/stories/${id}/explanation`);
+export const stepStoryExplanation = (id: number, refresh = false) =>
+  send<StoryExplanation>("POST", `/stories/${id}/explanation/step`, { refresh });

@@ -328,6 +328,176 @@ def story_outlets(story_id: int, db: Session = Depends(get_db)):
     ]
 
 
+class ExplanationArticle(BaseModel):
+    id: int
+    title: str | None
+    outlet: str
+    bias_label: str | None
+    explained: bool
+    probs: dict[str, float] | None = None
+    predicted: str | None = None
+    tokens: list[str] | None = None
+    values: list[list[float]] | None = None
+
+
+class TopWord(BaseModel):
+    word: str
+    value: float
+    articles: int
+
+
+class ExplanationAggregate(BaseModel):
+    label_counts: dict[str, int]
+    probs: dict[str, float]
+    top_words: dict[str, list[TopWord]]
+
+
+class StoryExplanationOut(BaseModel):
+    status: str  # none | partial | complete
+    eligible: int
+    total: int
+    analyzed: int
+    as_of: str | None
+    stale: bool
+    articles: list[ExplanationArticle]
+    aggregate: ExplanationAggregate | None
+
+
+def _explanation_state(story: Story) -> StoryExplanationOut:
+    from datetime import datetime as dt
+
+    from pipeline.explain import EXPLANATION_VERSION
+    from pipeline.explain import aggregate as aggregate_words
+
+    eligible_articles = [a for a in story.articles if a.bias_label]
+    eligible = len(eligible_articles)
+
+    selection = story.bias_explanation
+    if not selection or selection.get("version") != EXPLANATION_VERSION:
+        return StoryExplanationOut(
+            status="none", eligible=eligible, total=0, analyzed=0,
+            as_of=None, stale=False, articles=[], aggregate=None,
+        )
+
+    id_order = {aid: i for i, aid in enumerate(selection["article_ids"])}
+    selected = sorted(
+        (a for a in eligible_articles if a.id in id_order), key=lambda a: id_order[a.id]
+    )
+
+    payloads = []
+    out_articles = []
+    for a in selected:
+        payload = a.bias_explanation
+        if payload and payload.get("version") != EXPLANATION_VERSION:
+            payload = None
+        if payload:
+            payloads.append(payload)
+        out_articles.append(
+            ExplanationArticle(
+                id=a.id,
+                title=a.title,
+                outlet=a.outlet.domain,
+                bias_label=a.bias_label,
+                explained=payload is not None,
+                probs=payload["probs"] if payload else None,
+                predicted=payload["predicted"] if payload else None,
+                tokens=payload["tokens"] if payload else None,
+                values=payload["values"] if payload else None,
+            )
+        )
+
+    total = len(selected)
+    analyzed = len(payloads)
+    status = "complete" if total and analyzed == total else "partial"
+
+    as_of_dt = dt.fromisoformat(selection["as_of"])
+    stale = any(
+        a.id not in id_order and a.published_at > as_of_dt for a in eligible_articles
+    )
+
+    return StoryExplanationOut(
+        status=status,
+        eligible=eligible,
+        total=total,
+        analyzed=analyzed,
+        as_of=selection["as_of"],
+        stale=stale,
+        articles=out_articles,
+        aggregate=ExplanationAggregate(**aggregate_words(payloads)) if payloads else None,
+    )
+
+
+@app.get("/api/stories/{story_id}/explanation", response_model=StoryExplanationOut)
+def story_explanation(story_id: int, db: Session = Depends(get_db)):
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+    return _explanation_state(story)
+
+
+class ExplainStepRequest(BaseModel):
+    refresh: bool = False
+
+
+@app.post("/api/stories/{story_id}/explanation/step", response_model=StoryExplanationOut)
+def story_explanation_step(
+    story_id: int, req: ExplainStepRequest = ExplainStepRequest(), db: Session = Depends(get_db)
+):
+    """Explain one article toward this story's lean summary. Call repeatedly
+    until status is "complete" - each call does at most one SHAP compute
+    (~15-60s) so it stays inside a normal HTTP timeout."""
+    from datetime import UTC, datetime as dt
+
+    from pipeline.explain import EXPLANATION_VERSION, compute_lock, explain_text, select_articles
+    from pipeline.nlp import _text_of
+
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+
+    eligible_articles = [a for a in story.articles if a.bias_label]
+    if not eligible_articles:
+        raise HTTPException(409, "story has no labeled articles to explain")
+
+    selection = story.bias_explanation
+    if req.refresh or not selection or selection.get("version") != EXPLANATION_VERSION:
+        selected = select_articles(story)
+        story.bias_explanation = {
+            "version": EXPLANATION_VERSION,
+            "article_ids": [a.id for a in selected],
+            "as_of": dt.now(UTC).isoformat(),
+        }
+        db.commit()
+    else:
+        id_order = {aid: i for i, aid in enumerate(selection["article_ids"])}
+        selected = sorted(
+            (a for a in eligible_articles if a.id in id_order), key=lambda a: id_order[a.id]
+        )
+
+    pending = next(
+        (
+            a
+            for a in selected
+            if not a.bias_explanation or a.bias_explanation.get("version") != EXPLANATION_VERSION
+        ),
+        None,
+    )
+    if pending is not None:
+        text = _text_of(pending)
+        with compute_lock:
+            db.refresh(pending)
+            already_done = (
+                pending.bias_explanation
+                and pending.bias_explanation.get("version") == EXPLANATION_VERSION
+            )
+            if not already_done:
+                pending.bias_explanation = explain_text(text)
+                db.commit()
+
+    db.refresh(story)
+    return _explanation_state(story)
+
+
 @app.get("/api/search", response_model=list[ArticleOut])
 def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
     from pipeline.nlp import _embedder

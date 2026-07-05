@@ -18,6 +18,8 @@ def init_db() -> None:
                 "ON articles USING hnsw (embedding vector_cosine_ops)"
             )
         )
+        conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS bias_explanation JSONB"))
+        conn.execute(text("ALTER TABLE stories ADD COLUMN IF NOT EXISTS bias_explanation JSONB"))
         conn.commit()
 
 

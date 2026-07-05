@@ -17,9 +17,11 @@ import {
 } from "recharts";
 import { decodeEntities, fetchArc, fetchOutlets } from "../api";
 import BiasBar from "../components/BiasBar";
+import BiasChip from "../components/BiasChip";
 import DriftMap from "../components/DriftMap";
 import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
+import StoryExplain from "../components/StoryExplain";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -248,6 +250,10 @@ export default function Story() {
             </div>
           </Panel>
 
+          <Panel title="Why these lean labels?" hint="SHAP EXPLANATION">
+            <StoryExplain storyId={id} />
+          </Panel>
+
           <Panel title="Outlets on this story">
             <table className="w-full text-sm">
               <thead>
@@ -275,20 +281,6 @@ export default function Story() {
         </div>
       </div>
     </StoryAsk>
-  );
-}
-
-function BiasChip({ label }: { label: string | null }) {
-  if (!label) return null;
-  const bg = label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)";
-  const ink = label === "center" ? "var(--chip-center-ink)" : "#fff";
-  return (
-    <span
-      className="w-11 shrink-0 rounded py-0.5 text-center text-[9px] font-semibold uppercase"
-      style={{ ...mono, letterSpacing: "0.08em", background: bg, color: ink }}
-    >
-      {label === "center" ? "CENTR" : label}
-    </span>
   );
 }
 

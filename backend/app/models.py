@@ -47,6 +47,7 @@ class Story(Base):
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     summary: Mapped[str | None] = mapped_column(Text)
     death_risk: Mapped[float | None] = mapped_column(Float)  # XGBoost score, 0..1
+    bias_explanation: Mapped[dict | None] = mapped_column(JSONB)  # selection record, see pipeline/explain.py
 
     articles: Mapped[list["Article"]] = relationship(back_populates="story")
     daily_metrics: Mapped[list["StoryDailyMetric"]] = relationship(
@@ -79,6 +80,7 @@ class Article(Base):
     sentiment: Mapped[float | None] = mapped_column(Float)  # -1 .. +1
     bias_label: Mapped[str | None] = mapped_column(String(8))  # left | center | right
     bias_score: Mapped[float | None] = mapped_column(Float)  # -1 (left) .. +1 (right)
+    bias_explanation: Mapped[dict | None] = mapped_column(JSONB)  # SHAP payload, see pipeline/explain.py
     entities: Mapped[dict | None] = mapped_column(JSONB)  # spaCy NER output
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
 
