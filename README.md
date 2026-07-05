@@ -16,30 +16,8 @@ GDELT GKG ingestion every 15 minutes.
 NLP pipeline: MiniLM embeddings, VADER sentiment, spaCy NER, politicalBiasBERT left/center/right scoring.
 HDBSCAN story clustering, daily analytics, LangGraph + Groq chat agent.
 
-## Pages
-
-**Feed** — active, fading, and dead stories with bias bars, sparklines, and lifecycle status.
-
 <p align="center">
-  <img src="docs/screenshots/feed.png" alt="Feed page" width="700">
-</p>
-
-**Story** — full arc: coverage volume, lean over time, sentiment trajectory, narrative drift map, outlet breakdown.
-
-<p align="center">
-  <img src="docs/screenshots/story.png" alt="Story page" width="700">
-</p>
-
-**Analytics** — corpus-wide stats: stories by category, bias distribution, outlet landscape map, death-risk table.
-
-<p align="center">
-  <img src="docs/screenshots/analytics.png" alt="Analytics page" width="700">
-</p>
-
-**Ask** — agentic RAG chat over the full archive (or scoped to a single story), answers with article citations.
-
-<p align="center">
-  <img src="docs/screenshots/chat.png" alt="Chat page" width="700">
+  <img src="docs/screenshots/agent-sidebar.png" alt="Agent sidebar with suggested questions on a story page" width="700">
 </p>
 
 ## Local setup
