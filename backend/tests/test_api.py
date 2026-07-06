@@ -1,5 +1,6 @@
 """API smoke tests against the dev database (needs prior pipeline runs)."""
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -9,6 +10,8 @@ from app.main import app
 from app.models import Article, Story
 
 client = TestClient(app)
+
+pytestmark = pytest.mark.dev_db
 
 
 def test_list_stories():

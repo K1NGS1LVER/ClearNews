@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
@@ -70,6 +71,7 @@ def test_foryou_requires_auth():
     assert resp.status_code == 401
 
 
+@pytest.mark.dev_db
 def test_foryou_smoke():
     email = f"t{uuid4().hex}@test.local"
     try:

@@ -1,5 +1,7 @@
 # ClearNews
 
+[![CI](https://github.com/K1NGS1LVER/ClearNews/actions/workflows/ci.yml/badge.svg)](https://github.com/K1NGS1LVER/ClearNews/actions/workflows/ci.yml)
+
 News story lifecycle and narrative drift intelligence platform.
 Tracks stories as living entities: how coverage was born, how framing and political lean shifted, and when the story died.
 Includes an agentic RAG research assistant that answers questions with article citations.
