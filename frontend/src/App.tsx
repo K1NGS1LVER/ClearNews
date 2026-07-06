@@ -10,7 +10,6 @@ import Feed from "./pages/Feed";
 import Loading from "./components/Loading";
 import ForYou from "./pages/ForYou";
 import Landing from "./pages/Landing";
-import Latest from "./pages/Latest";
 import Login from "./pages/Login";
 import Search from "./pages/Search";
 import Signup from "./pages/Signup";
@@ -20,7 +19,6 @@ import { useTheme } from "./theme";
 
 const baseNavItems = [
   { to: "/stories", label: "Stories", icon: "●", end: true },
-  { to: "/latest", label: "Latest", icon: "≡", end: false },
   { to: "/search", label: "Search", icon: "⌕", end: false },
   { to: "/analytics", label: "Data", icon: "◔", end: false },
   { to: "/chat", label: "Ask", icon: "✦", end: false },
@@ -166,7 +164,6 @@ export default function App() {
           <Route path="/stories" element={<Feed />} />
           <Route path="/story/:id" element={<Story />} />
           <Route path="/article/:id" element={<Article />} />
-          <Route path="/latest" element={<Latest />} />
           <Route path="/search" element={<Search />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/chat" element={<Chat />} />

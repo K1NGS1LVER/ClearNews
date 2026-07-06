@@ -98,25 +98,6 @@ test.describe("Article - /article/:id", () => {
   });
 });
 
-test.describe("Latest - /latest", () => {
-  test("shows latest articles grouped by day", async ({ page }) => {
-    await page.goto("/latest");
-    await page.waitForLoadState("networkidle");
-
-    const loading = page.locator("text=Loading latest news");
-    if (await loading.isVisible()) {
-      await loading.waitFor({ state: "hidden", timeout: 10_000 });
-    }
-
-    const articleLink = page.locator('a[href^="/article/"]').first();
-    if (await articleLink.isVisible()) {
-      await expect(articleLink).toBeVisible();
-      const articleHref = await articleLink.getAttribute("href");
-      expect(articleHref).toMatch(/^\/article\/\d+/);
-    }
-  });
-});
-
 test.describe("Search - /search", () => {
   test("search form is visible and functional", async ({ page }) => {
     await page.goto("/search");

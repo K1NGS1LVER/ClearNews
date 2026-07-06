@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 
 const navLinks = [
   { label: "Stories", path: "/stories" },
-  { label: "Latest", path: "/latest" },
   { label: "Search", path: "/search" },
   { label: "Data", path: "/analytics" },
   { label: "Ask", path: "/chat" },
@@ -31,14 +30,14 @@ test.describe("Navigation", () => {
   });
 
   test("browser back and forward navigation works", async ({ page }) => {
-    await page.goto("/latest");
+    await page.goto("/stories");
     await expect(page.locator("text=ClearNews")).toBeVisible();
 
     await page.goto("/search");
     await expect(page.locator('input[placeholder*="diplomatic"]')).toBeVisible();
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/latest/);
+    await expect(page).toHaveURL(/\/stories/);
 
     await page.goForward();
     await expect(page).toHaveURL(/\/search/);
