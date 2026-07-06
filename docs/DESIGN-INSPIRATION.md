@@ -1,12 +1,10 @@
 # Design inspiration research - ClearNews
 
 Research date: 2026-07-02.
-Method: visited each site in a real browser at 1440x900, captured screenshots (in `docs/inspiration/`), took notes against the ClearNews redesign brief.
+Method: visited each site in a real browser at 1440x900, took notes against the ClearNews redesign brief.
 Blocked and skipped: Reuters Graphics (bot wall), Perplexity (Cloudflare check), AllSides (page failed to render headless), FT and Stripe Dashboard (paywall/login).
 
 ## Ground News (ground.news) - closest competitor
-
-Screenshots: `inspiration/ground-home.png`, `ground-feed.png`, `ground-story-top.png`, `ground-story-mid.png`.
 
 First thing the eye lands on: story headline, then the tricolor bias bar directly under it.
 The bar works because it is the only saturated color in an otherwise near-monochrome dark UI.
@@ -23,8 +21,6 @@ The bar works because it is the only saturated color in an otherwise near-monoch
 
 ## Verity (verity.news) - story clustering, facts vs narratives
 
-Screenshots: `inspiration/verity-home.png`, `verity-story.png`.
-
 - Dark editorial look: serif headlines (Playfair-like) on near-black, sans for everything else. Feels calm and premium; a serif/sans split is worth trying for ClearNews headlines vs data.
 - Source attribution as logo cluster: 3 overlapping outlet favicons + "+5 · 48 MINS" per card. More human than a number, cheaper than a bar.
 - Story page sections are named claims: "The Facts" (dot-timeline of bullet statements) and a "Sources Split" grid: columns Left/Center/Right crossed with rows Pro-Establishment/Anti, outlet logos placed in cells. A 2D bias map; more nuance than a single axis.
@@ -33,8 +29,6 @@ Screenshots: `inspiration/verity-home.png`, `verity-story.png`.
 
 ## Techmeme (techmeme.com) - density through typography only
 
-Screenshot: `inspiration/techmeme.png`.
-
 - Zero cards, zero images-as-decoration, zero badges. Hierarchy is exclusively: bold serif headline size, then colored source prefix ("Financial Times:"), then link lists.
 - The cluster pattern: one big headline, then "More:" followed by a comma-separated inline list of 20 outlets covering the same story. An entire coverage cluster in 3 lines of text. This is the extreme-density end of the spectrum for our story cards; our Feed sits somewhere between Techmeme and Ground.
 - Three-column layout: main river / sponsors / "Newest" ticker with timestamps ("20 minutes ago"). Freshness column is a nice model for our Latest tab.
@@ -42,15 +36,11 @@ Screenshot: `inspiration/techmeme.png`.
 
 ## NYT (nytimes.com) - editorial visual weight
 
-Screenshot: `inspiration/nyt.png`.
-
 - Importance is encoded by size, weight, and position only. No badges, no color chips. The lead story is simply bigger and higher.
 - Kicker labels in tiny caps ("ANALYSIS", "LIVE") plus "4 MIN READ" metadata. LIVE is the only red on the page, so it actually means something. Direct lesson for our lifecycle states: emerging/active/declining/dead should not all get colored badges; reserve color for the one state that demands attention (active/spiking), let the rest be text.
 - Hairline rules (1px light gray) separate stories instead of card boxes. Sections group related links as plain text chips under a bold section title ("War in the Middle East" + related topic links). Model for our story -> related-articles grouping.
 
 ## Our World in Data (ourworldindata.org) - chart system at scale
-
-Screenshot: `inspiration/owid-chart.png`.
 
 - One chart grammar everywhere: serif chart title, one-sentence gray subtitle defining the metric, dotted horizontal gridlines only, no vertical gridlines, no chart border.
 - Series are labeled directly at the line ends in the series color. No legend box. Recharts can do this with a custom label; it removes a full eye round-trip.
@@ -60,8 +50,6 @@ Screenshot: `inspiration/owid-chart.png`.
 
 ## Linear (linear.app) - dense lists, restrained color
 
-Screenshot: `inspiration/linear.png`.
-
 - Dark UI where hierarchy comes from opacity tiers, not color: primary text ~white, secondary ~60%, tertiary ~40%. Only status icons carry hue (yellow "In Progress").
 - Property rows (status, priority, assignee) are icon + short text, all muted until hover. Model for our story-card metadata row (status, article count, outlet count, age).
 - Activity feed: tiny avatar + actor bold + action muted + relative time. Model for story timeline events ("story peaked · 34 outlets · 2d ago").
@@ -69,7 +57,7 @@ Screenshot: `inspiration/linear.png`.
 
 ## The Pudding (pudding.cool)
 
-Screenshot captured but weakly relevant: playful hand-drawn aesthetic, opposite tonal direction from an analyst tool.
+Playful hand-drawn aesthetic, opposite tonal direction from an analyst tool.
 Their scroll-driven "one chart evolves as you read" pattern is still the right interaction model for our narrative-drift story view, if we later build a scrollytelling story page.
 
 ## Synthesis - recommended direction for ClearNews
