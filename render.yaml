@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: clearnews-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /docs
+    envVars:
+      - key: DATABASE_URL
+        sync: false # Supabase connection string, see docs/DEPLOY.md
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: ENV
+        value: production
+      - key: FRONTEND_ORIGIN
+        sync: false # your Vercel URL, e.g. https://clearnews.vercel.app
+
+  # ingestion/NLP/clustering/nightly metrics - see pipeline/scheduler.py.
+  # Render worker services have no free tier; this runs continuously.
+  - type: worker
+    name: clearnews-scheduler
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python -m pipeline.scheduler
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b

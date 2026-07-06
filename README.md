@@ -116,6 +116,10 @@ Unset for local dev and docker-compose; set both only when actually serving over
 - `ENV=production` - marks the session cookie `Secure`.
 - `FRONTEND_ORIGIN=https://app.example.com` - comma-separated allowed origins; only needed when the frontend is hosted on a different origin than the API (not needed behind the docker-compose nginx proxy, which serves both same-origin).
 
+### Deploying
+
+Free-tier setup on Vercel (frontend) + Render (API + scheduler) + Supabase (Postgres/pgvector) - see [docs/DEPLOY.md](docs/DEPLOY.md) for the full walkthrough (`render.yaml` and `frontend/vercel.json` are already in the repo).
+
 ## Layout
 
 ```
