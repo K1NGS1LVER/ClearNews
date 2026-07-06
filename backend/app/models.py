@@ -48,6 +48,9 @@ class Story(Base):
     summary: Mapped[str | None] = mapped_column(Text)
     death_risk: Mapped[float | None] = mapped_column(Float)  # XGBoost score, 0..1
     bias_explanation: Mapped[dict | None] = mapped_column(JSONB)  # selection record, see pipeline/explain.py
+    # lowercased title + article entities/themes, kept current by pipeline/metrics.py
+    # so /api/foryou can match user keywords without loading every article per request
+    keyword_haystack: Mapped[str | None] = mapped_column(Text)
 
     articles: Mapped[list["Article"]] = relationship(back_populates="story")
     daily_metrics: Mapped[list["StoryDailyMetric"]] = relationship(

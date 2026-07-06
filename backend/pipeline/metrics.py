@@ -3,6 +3,7 @@
 Run: uv run python -m pipeline.metrics
 """
 
+import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
@@ -37,6 +38,14 @@ def compute_story_metrics(session: Session, story: Story) -> None:
     by_day = defaultdict(list)
     for a in articles:
         by_day[a.published_at.date()].append(a)
+
+    haystack_parts = [story.title.lower()]
+    for a in articles:
+        if a.entities:
+            haystack_parts.append(json.dumps(a.entities).lower())
+        if a.themes:
+            haystack_parts.append(json.dumps(a.themes).lower())
+    story.keyword_haystack = " ".join(haystack_parts)
 
     day_embeddings = {
         d: np.array([a.embedding for a in arts if a.embedding is not None])

@@ -7,6 +7,7 @@ import json
 import threading
 from contextlib import asynccontextmanager
 from datetime import date
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.auth import current_user
 from app.auth import router as auth_router
 from app.db import get_db
-from app.models import Article, Outlet, Story, User
+from app.models import Article, Outlet, Story, StoryDailyMetric, User
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -107,43 +108,92 @@ def _article_out(a: Article) -> ArticleOut:
     )
 
 
-def _story_card(s: Story) -> StoryCard | None:
-    metrics = sorted(s.daily_metrics, key=lambda m: m.day)
-    if not metrics:
-        return None
-    total = sum(m.article_count for m in metrics)
-    # bias shares weighted by daily volume
-    weight = lambda attr: (
-        sum((getattr(m, attr) or 0) * m.article_count for m in metrics) / total
-        if total
-        else None
-    )
-    imaged = sorted(
-        (a for a in s.articles if a.image_url), key=lambda a: a.published_at, reverse=True
-    )
-    return StoryCard(
-        id=s.id,
-        title=s.title,
-        status=s.status,
-        first_seen=s.first_seen.date(),
-        last_seen=s.last_seen.date(),
-        article_count=total,
-        bias_left_share=weight("bias_left_share"),
-        bias_center_share=weight("bias_center_share"),
-        bias_right_share=weight("bias_right_share"),
-        daily_counts=[m.article_count for m in metrics],
-        image_url=imaged[0].image_url if imaged else None,
-    )
+def _bulk_metrics(db: Session, story_ids: list[int]) -> dict[int, dict]:
+    """Aggregate each story's daily metrics in one query instead of lazily
+    loading the `daily_metrics` relationship per story (N+1 at feed scale)."""
+    if not story_ids:
+        return {}
+    rows = db.execute(
+        select(
+            StoryDailyMetric.story_id,
+            StoryDailyMetric.day,
+            StoryDailyMetric.article_count,
+            StoryDailyMetric.bias_left_share,
+            StoryDailyMetric.bias_center_share,
+            StoryDailyMetric.bias_right_share,
+        )
+        .where(StoryDailyMetric.story_id.in_(story_ids))
+        .order_by(StoryDailyMetric.story_id, StoryDailyMetric.day)
+    ).all()
+
+    by_story: dict[int, list] = {}
+    for row in rows:
+        by_story.setdefault(row.story_id, []).append(row)
+
+    out = {}
+    for story_id, story_rows in by_story.items():
+        total = sum(r.article_count for r in story_rows)
+        # bias shares weighted by daily volume
+        weight = lambda attr, rows=story_rows, total=total: (
+            sum((getattr(r, attr) or 0) * r.article_count for r in rows) / total
+            if total
+            else None
+        )
+        out[story_id] = {
+            "article_count": total,
+            "daily_counts": [r.article_count for r in story_rows],
+            "bias_left_share": weight("bias_left_share"),
+            "bias_center_share": weight("bias_center_share"),
+            "bias_right_share": weight("bias_right_share"),
+        }
+    return out
+
+
+def _bulk_images(db: Session, story_ids: list[int]) -> dict[int, str]:
+    """Most recent article image per story in one query (postgres DISTINCT
+    ON), instead of loading every article per story to find one."""
+    if not story_ids:
+        return {}
+    rows = db.execute(
+        select(Article.story_id, Article.image_url)
+        .where(Article.story_id.in_(story_ids), Article.image_url.isnot(None))
+        .order_by(Article.story_id, Article.published_at.desc())
+        .distinct(Article.story_id)
+    ).all()
+    return {row.story_id: row.image_url for row in rows}
 
 
 @app.get("/api/stories", response_model=list[StoryCard])
 def list_stories(status: str | None = None, db: Session = Depends(get_db)):
-    q = select(Story)
+    q = select(Story.id, Story.title, Story.status, Story.first_seen, Story.last_seen)
     if status:
         q = q.where(Story.status == status)
-    stories = db.execute(q.order_by(Story.last_seen.desc())).scalars().all()
+    stories = db.execute(q).all()
 
-    cards = [c for s in stories if (c := _story_card(s)) is not None]
+    story_ids = [s.id for s in stories]
+    metrics = _bulk_metrics(db, story_ids)
+    images = _bulk_images(db, story_ids)
+
+    cards = []
+    for s in stories:
+        m = metrics.get(s.id)
+        if m is None:  # no daily metrics computed yet - not feed-ready
+            continue
+        cards.append(
+            StoryCard(
+                id=s.id,
+                title=s.title,
+                status=s.status,
+                first_seen=s.first_seen.date(),
+                last_seen=s.last_seen.date(),
+                article_count=m["article_count"],
+                bias_left_share=m["bias_left_share"],
+                bias_center_share=m["bias_center_share"],
+                bias_right_share=m["bias_right_share"],
+                daily_counts=m["daily_counts"],
+                image_url=images.get(s.id),
+            )
+        )
     cards.sort(key=lambda c: c.article_count, reverse=True)
     return cards
 
@@ -202,25 +252,48 @@ def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
     from datetime import UTC, datetime
 
     now = datetime.now(UTC)
-    stories = db.execute(select(Story)).scalars().all()
+    stories = db.execute(
+        select(
+            Story.id,
+            Story.title,
+            Story.status,
+            Story.first_seen,
+            Story.last_seen,
+            Story.category,
+            Story.keyword_haystack,
+        )
+    ).all()
 
     favourite_category = user.favourite_category
     categories = user.categories or []
     keywords = [k.lower() for k in (user.keywords or [])]
     bias_pref = user.bias_pref
 
-    scored: list[tuple[float, list[str], Story, StoryCard]] = []
+    story_ids = [s.id for s in stories]
+    metrics = _bulk_metrics(db, story_ids)
+    images = _bulk_images(db, story_ids)
+
+    scored: list[tuple[float, list[str], Any, StoryCard]] = []
     for s in stories:
-        card = _story_card(s)
-        if card is None:
+        m = metrics.get(s.id)
+        if m is None:  # no daily metrics computed yet - not feed-ready
             continue
-        haystack_parts = [s.title.lower()]
-        for a in s.articles:
-            if a.entities:
-                haystack_parts.append(json.dumps(a.entities).lower())
-            if a.themes:
-                haystack_parts.append(json.dumps(a.themes).lower())
-        haystack = " ".join(haystack_parts)
+        card = StoryCard(
+            id=s.id,
+            title=s.title,
+            status=s.status,
+            first_seen=s.first_seen.date(),
+            last_seen=s.last_seen.date(),
+            article_count=m["article_count"],
+            bias_left_share=m["bias_left_share"],
+            bias_center_share=m["bias_center_share"],
+            bias_right_share=m["bias_right_share"],
+            daily_counts=m["daily_counts"],
+            image_url=images.get(s.id),
+        )
+        # kept current by pipeline/metrics.py; falls back to just the title
+        # until the next metrics run if a story predates that column
+        haystack = s.keyword_haystack or s.title.lower()
         days_since_seen = (now - s.last_seen).total_seconds() / 86400.0
 
         score, matched = score_story(
