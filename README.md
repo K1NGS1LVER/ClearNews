@@ -65,19 +65,65 @@ The API only reads; all enrichment happens as background pipeline steps, not on 
 
 ## Local setup
 
+### Docker (recommended - same steps on macOS, Linux, and Windows)
+
+No Homebrew/apt/uv/pnpm required, and it sidesteps the macOS OpenMP issue below entirely since Linux wheels don't collide the same way. Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (macOS/Windows) or Docker Engine + Compose (Linux).
+
 ```bash
-# database
+cp backend/.env.example backend/.env   # add your GROQ_API_KEY
+docker compose up --build
+# UI:  http://localhost:5173
+# API: http://localhost:8000
+```
+
+This starts Postgres+pgvector, the API (runs `alembic upgrade head` on boot), the continuous ingestion/NLP/clustering scheduler, and the UI behind nginx.
+Data takes the same calendar time to build up as the native setup (see [docs/DEMO.md](docs/DEMO.md)); `docker compose exec backend python -m pipeline.backfill 30 4` seeds recent history in one shot.
+
+### Native setup
+
+The backend (`uv`), frontend (`pnpm`), and data pipeline commands below are identical on every OS - the only platform-specific parts are installing Postgres+pgvector and starting it, called out per-OS.
+
+**macOS**
+
+```bash
 brew install postgresql@17 pgvector
 brew services start postgresql@17
 createdb clearnews
+```
 
+**Linux (Debian/Ubuntu)**
+
+```bash
+sudo apt install postgresql postgresql-contrib postgresql-server-dev-17 build-essential git
+# pgvector isn't in the default apt repo - build it from source (a few seconds):
+git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git /tmp/pgvector
+cd /tmp/pgvector && make && sudo make install && cd -
+sudo systemctl enable --now postgresql
+sudo -u postgres createuser -s "$USER"   # let your OS user connect without a password prompt
+createdb clearnews
+```
+
+Other distros: see [pgvector's install docs](https://github.com/pgvector/pgvector#installation) for the equivalent package/build step.
+
+**Windows**
+
+Native Windows isn't a well-trodden path for this stack (spacy/torch/hdbscan/umap/xgboost all expect a Linux-like build toolchain) and hasn't been tested here - use one of:
+- **WSL2** (recommended): install Ubuntu via WSL, then follow the Linux instructions above inside it.
+- **Docker Desktop**: see the Docker section above; works identically to macOS/Linux.
+
+If you do run natively, replace `./dev.sh` in the last step with two terminals (`uv run uvicorn app.main:app --reload --port 8000` and `pnpm dev`) since it's a bash script.
+
+**Backend, data, and frontend (all platforms)**
+
+```bash
 # backend
 cd backend
 cp .env.example .env          # add your GROQ_API_KEY for chat/summaries
 uv sync
-uv run python scripts/unify_libomp.py  # REQUIRED after every uv sync (macOS):
+uv run python scripts/unify_libomp.py  # macOS ONLY - REQUIRED after every uv sync:
                                        # torch + sklearn each bundle an OpenMP
-                                       # runtime; two in one process segfault
+                                       # runtime; two in one process segfault.
+                                       # Skip this on Linux/Windows.
 uv run alembic upgrade head            # creates the vector extension, tables, indexes
 
 # data (each step is idempotent)
@@ -89,25 +135,11 @@ uv run python -m pipeline.scheduler   # or: continuous 15-min ingestion
 
 # run
 cd ../frontend && pnpm install && cd ..
-./dev.sh   # starts API :8000 and UI :5173 together, Ctrl-C stops both
+./dev.sh   # starts API :8000 and UI :5173 together, Ctrl-C stops both (macOS/Linux/WSL)
 
 # tests
 cd backend && uv run pytest
 ```
-
-### Docker
-
-Alternative to the native setup above, no Homebrew/uv/pnpm required - also sidesteps the macOS OpenMP issue entirely since Linux wheels don't collide the same way.
-
-```bash
-cp backend/.env.example backend/.env   # add your GROQ_API_KEY
-docker compose up --build
-# UI:  http://localhost:5173
-# API: http://localhost:8000
-```
-
-This starts Postgres+pgvector, the API (runs `alembic upgrade head` on boot), the continuous ingestion/NLP/clustering scheduler, and the UI behind nginx.
-Data takes the same calendar time to build up as the native setup (see [docs/DEMO.md](docs/DEMO.md)); `docker compose exec backend python -m pipeline.backfill 30 4` seeds recent history in one shot.
 
 ### Production env vars
 
