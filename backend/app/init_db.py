@@ -1,28 +1,16 @@
-"""Create the pgvector extension and all tables. Run: uv run python -m app.init_db"""
+"""Schema is managed by Alembic. Run: uv run alembic upgrade head
 
-from sqlalchemy import text
+Kept as a thin wrapper so old muscle-memory (`uv run python -m app.init_db`)
+still works.
+"""
 
-from app.db import engine
-from app.models import Base
+import subprocess
+import sys
 
 
 def init_db() -> None:
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
-    Base.metadata.create_all(engine)
-    with engine.connect() as conn:
-        conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_articles_embedding_hnsw "
-                "ON articles USING hnsw (embedding vector_cosine_ops)"
-            )
-        )
-        conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS bias_explanation JSONB"))
-        conn.execute(text("ALTER TABLE stories ADD COLUMN IF NOT EXISTS bias_explanation JSONB"))
-        conn.commit()
+    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
 
 
 if __name__ == "__main__":
     init_db()
-    print(f"Tables created: {', '.join(Base.metadata.tables)}")

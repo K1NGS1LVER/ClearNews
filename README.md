@@ -51,7 +51,7 @@ uv sync
 uv run python scripts/unify_libomp.py  # REQUIRED after every uv sync (macOS):
                                        # torch + sklearn each bundle an OpenMP
                                        # runtime; two in one process segfault
-uv run python -m app.init_db
+uv run alembic upgrade head            # creates the vector extension, tables, indexes
 
 # data (each step is idempotent)
 uv run python -m pipeline.ingest      # pull latest 15-min GDELT file
