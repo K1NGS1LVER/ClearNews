@@ -18,6 +18,31 @@ GDELT GKG ingestion every 15 minutes.
 NLP pipeline: MiniLM embeddings, VADER sentiment, spaCy NER, politicalBiasBERT left/center/right scoring.
 HDBSCAN story clustering, daily analytics, LangGraph + Groq chat agent.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    GDELT[("GDELT GKG feed<br/>every 15 min")] --> Ingest["pipeline.ingest"]
+    Ingest --> DB[("Postgres + pgvector")]
+
+    DB --> NLP["pipeline.nlp<br/>MiniLM embeddings · VADER sentiment<br/>spaCy NER · politicalBiasBERT"]
+    NLP --> DB
+    DB --> Cluster["pipeline.cluster<br/>HDBSCAN over embeddings"]
+    Cluster --> DB
+    DB --> Analytics["pipeline.metrics / topics / predict<br/>daily stats · drift · categories · XGBoost death-risk"]
+    Analytics --> DB
+
+    DB --> API["FastAPI"]
+    API --> UI["React UI"]
+
+    DB --> Agent["LangGraph agent<br/>retrieval tools"]
+    Agent <--> Groq[["Groq LLM"]]
+    Agent --> API
+```
+
+`pipeline.scheduler` drives the loop: ingest every 15 minutes, NLP + clustering hourly, metrics/categories/death-risk nightly - each step is idempotent and safe to also run by hand (see [Local setup](#local-setup)).
+The API only reads; all enrichment happens as background pipeline steps, not on the request path.
+
 ## Pages
 
 **Story** — headline, bias bar, article coverage list, and lifecycle status.
