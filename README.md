@@ -68,6 +68,20 @@ cd ../frontend && pnpm install && cd ..
 cd backend && uv run pytest
 ```
 
+### Docker
+
+Alternative to the native setup above, no Homebrew/uv/pnpm required - also sidesteps the macOS OpenMP issue entirely since Linux wheels don't collide the same way.
+
+```bash
+cp backend/.env.example backend/.env   # add your GROQ_API_KEY
+docker compose up --build
+# UI:  http://localhost:5173
+# API: http://localhost:8000
+```
+
+This starts Postgres+pgvector, the API (runs `alembic upgrade head` on boot), the continuous ingestion/NLP/clustering scheduler, and the UI behind nginx.
+Data takes the same calendar time to build up as the native setup (see [docs/DEMO.md](docs/DEMO.md)); `docker compose exec backend python -m pipeline.backfill 30 4` seeds recent history in one shot.
+
 ## Layout
 
 ```
