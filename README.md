@@ -84,6 +84,13 @@ docker compose up --build
 This starts Postgres+pgvector, the API (runs `alembic upgrade head` on boot), the continuous ingestion/NLP/clustering scheduler, and the UI behind nginx.
 Data takes the same calendar time to build up as the native setup (see [docs/DEMO.md](docs/DEMO.md)); `docker compose exec backend python -m pipeline.backfill 30 4` seeds recent history in one shot.
 
+### Production env vars
+
+Unset for local dev and docker-compose; set both only when actually serving over HTTPS behind a real domain (`ENV=production` makes the session cookie `Secure`, which browsers silently drop over plain HTTP):
+
+- `ENV=production` - marks the session cookie `Secure`.
+- `FRONTEND_ORIGIN=https://app.example.com` - comma-separated allowed origins; only needed when the frontend is hosted on a different origin than the API (not needed behind the docker-compose nginx proxy, which serves both same-origin).
+
 ## Layout
 
 ```

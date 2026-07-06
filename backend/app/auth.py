@@ -1,11 +1,14 @@
 """Signup / login / logout / me / preferences — cookie session auth."""
 
+import os
 import secrets
+import time
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +22,24 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 SESSION_COOKIE = "session"
 SESSION_MAX_AGE = 30 * 86400
+IS_PRODUCTION = os.getenv("ENV") == "production"
 hasher = PasswordHasher()
+
+# In-process fixed-window limiter: 10 attempts/min/IP on login+signup. Good
+# enough for this single-instance deployment; a multi-worker/replica setup
+# would need a shared store (e.g. Redis) instead.
+RATE_LIMIT = 10
+RATE_WINDOW_SECONDS = 60
+_attempts: dict[str, list[float]] = defaultdict(list)
+
+
+def rate_limit(request: Request) -> None:
+    key = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    window = _attempts[key] = [t for t in _attempts[key] if now - t < RATE_WINDOW_SECONDS]
+    if len(window) >= RATE_LIMIT:
+        raise HTTPException(429, "too many attempts, try again shortly")
+    window.append(now)
 
 
 class SignupRequest(BaseModel):
@@ -82,9 +102,9 @@ def _set_session_cookie(response: Response, token: str) -> None:
         token,
         httponly=True,
         samesite="lax",
+        secure=IS_PRODUCTION,
         max_age=SESSION_MAX_AGE,
         path="/",
-        # ponytail: secure=True once served over HTTPS in prod
     )
 
 
@@ -106,7 +126,7 @@ def current_user(
     return user
 
 
-@router.post("/auth/signup", response_model=Me)
+@router.post("/auth/signup", response_model=Me, dependencies=[Depends(rate_limit)])
 def signup(req: SignupRequest, response: Response, db: Session = Depends(get_db)):
     if "@" not in req.email or len(req.password) < 8:
         raise HTTPException(400, "invalid email or password too short")
@@ -127,7 +147,7 @@ def signup(req: SignupRequest, response: Response, db: Session = Depends(get_db)
     return _me(user)
 
 
-@router.post("/auth/login", response_model=Me)
+@router.post("/auth/login", response_model=Me, dependencies=[Depends(rate_limit)])
 def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.execute(
         select(User).where(User.email == req.email)

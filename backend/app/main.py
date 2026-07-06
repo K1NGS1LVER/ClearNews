@@ -4,12 +4,14 @@ Run: uv run uvicorn app.main:app --reload
 """
 
 import json
+import os
 import threading
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -34,6 +36,21 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ClearNews API", lifespan=lifespan)
 app.include_router(auth_router)
+
+# Only needed when the frontend is served from a different origin than the
+# API (e.g. static host + separate API host). The docker-compose setup and
+# local dev (vite proxy) are same-origin and need none of this. Cookie auth
+# requires allow_credentials plus an explicit origin list - "*" can't be
+# combined with credentials per the CORS spec.
+_frontend_origins = [o for o in os.getenv("FRONTEND_ORIGIN", "").split(",") if o]
+if _frontend_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_frontend_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 class StoryCard(BaseModel):
