@@ -42,7 +42,7 @@ class GkgRecord:
 
 def fetch_latest_gkg_url(client: httpx.Client | None = None) -> str:
     """Return the URL of the most recent 15-minute GKG zip."""
-    c = client or httpx.Client()
+    c = client or httpx.Client(timeout=60)
     resp = c.get(LASTUPDATE_URL)
     resp.raise_for_status()
     for line in resp.text.splitlines():

@@ -69,10 +69,35 @@ def load_records(session: Session, records: Iterable[GkgRecord]) -> int:
     return inserted
 
 
+import datetime as dt
+import re
+import httpx
+
+
 def ingest_latest() -> int:
     url = fetch_latest_gkg_url()
-    print(f"downloading {url}")
-    csv_text = download_gkg(url)
+    csv_text = None
+    for _ in range(5):
+        print(f"downloading {url}")
+        try:
+            csv_text = download_gkg(url)
+            break
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                print(f"URL {url} returned 404, trying previous 15-minute slot...")
+                match = re.search(r"(\d{14})\.gkg\.csv\.zip", url)
+                if match:
+                    ts_str = match.group(1)
+                    ts = dt.datetime.strptime(ts_str, "%Y%m%d%H%M%S")
+                    prev_ts = ts - dt.timedelta(minutes=15)
+                    prev_ts_str = prev_ts.strftime("%Y%m%d%H%M%S")
+                    url = url.replace(ts_str, prev_ts_str)
+                    continue
+            raise e
+
+    if not csv_text:
+        raise ValueError("Could not download any recent GKG files.")
+
     with SessionLocal() as session:
         n = load_records(session, parse_gkg(csv_text))
     return n
