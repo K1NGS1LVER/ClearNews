@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import pytest
 
 from langchain_core.messages import ToolMessage
 from langgraph.errors import GraphRecursionError
@@ -11,6 +12,7 @@ from agent.chat import _collect_sources, stream_chat
 from agent.tools import get_story_arc, list_stories, make_search_story, search_corpus
 
 
+@pytest.mark.dev_db
 def test_search_corpus_returns_sources():
     results = search_corpus.invoke({"query": "economy and manufacturing"})
     assert results
@@ -18,6 +20,7 @@ def test_search_corpus_returns_sources():
         assert {"article_id", "title", "url", "outlet", "bias_label"} <= set(r)
 
 
+@pytest.mark.dev_db
 def test_search_story_is_scoped():
     stories = list_stories.invoke({})
     story_id = max(stories, key=lambda s: s["articles"])["story_id"]
@@ -34,6 +37,7 @@ def test_search_story_is_scoped():
             assert session.get(Article, r["article_id"]).story_id == story_id
 
 
+@pytest.mark.dev_db
 def test_get_story_arc():
     stories = list_stories.invoke({})
     arc = get_story_arc.invoke({"story_id": stories[0]["story_id"]})

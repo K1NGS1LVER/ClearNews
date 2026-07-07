@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from pathlib import Path
+import pytest
 
 from pipeline.predict import FEATURE_NAMES, story_features
 from pipeline.topics import categorize_centroid
@@ -22,6 +23,7 @@ def test_model_selftest_in_subprocess():
     assert "selftest ok" in result.stdout
 
 
+@pytest.mark.dev_db
 def test_story_features_on_live_story():
     from sqlalchemy import select
 
