@@ -6,6 +6,7 @@ Run: uv run python -m pipeline.metrics
 import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
+from typing import Sequence
 
 import numpy as np
 from sqlalchemy import func, select
@@ -17,6 +18,21 @@ from app.models import Article, Outlet, Story, StoryDailyMetric
 
 FADING_AFTER = timedelta(days=2)
 DEAD_AFTER = timedelta(days=5)
+# a country must be mentioned by at least this share of a story's articles to
+# count as what the story is "about" - filters out one outlet's passing
+# mention of a country that isn't actually the story's subject
+ABOUT_COUNTRY_THRESHOLD = 0.3
+
+
+def compute_about_countries(articles: Sequence[Article]) -> list[str]:
+    if not articles:
+        return []
+    counts: defaultdict[str, int] = defaultdict(int)
+    for a in articles:
+        for code in a.mentioned_countries or []:
+            counts[code] += 1
+    threshold = ABOUT_COUNTRY_THRESHOLD * len(articles)
+    return sorted(code for code, n in counts.items() if n >= threshold)
 
 
 def daily_drift(day_embeddings: dict) -> dict:
@@ -46,6 +62,7 @@ def compute_story_metrics(session: Session, story: Story) -> None:
         if a.themes:
             haystack_parts.append(json.dumps(a.themes).lower())
     story.keyword_haystack = " ".join(haystack_parts)
+    story.about_countries = compute_about_countries(articles)
 
     day_embeddings = {
         d: np.array([a.embedding for a in arts if a.embedding is not None])

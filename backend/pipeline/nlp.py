@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import Article
+from pipeline.country_codes import gdelt_name_to_iso2
 
 BIAS_MODEL = "bucketresearch/politicalBiasBERT"
 BIAS_LABELS = ["left", "center", "right"]
@@ -91,8 +92,7 @@ def score_bias(texts: list[str]) -> list[tuple[str, float]]:
     return out
 
 
-def extract_entities(text: str) -> dict[str, list[str]]:
-    doc = _spacy()(text)
+def _entities_from_doc(doc) -> dict[str, list[str]]:
     ents: dict[str, list[str]] = {"people": [], "orgs": [], "locations": []}
     kind = {"PERSON": "people", "ORG": "orgs", "GPE": "locations", "LOC": "locations"}
     for ent in doc.ents:
@@ -100,6 +100,19 @@ def extract_entities(text: str) -> dict[str, list[str]]:
         if key and ent.text not in ents[key]:
             ents[key].append(ent.text)
     return ents
+
+
+def extract_entities(text: str) -> dict[str, list[str]]:
+    return _entities_from_doc(_spacy()(text))
+
+
+def extract_mentioned_countries(doc) -> list[str]:
+    """Country-level GPE entities mapped to ISO-2 - a coarse fallback for
+    articles GKG's V2Locations didn't tag (e.g. DOC-API-sourced ones).
+    City/region GPEs ("Mumbai") don't resolve; that's an accepted gap, not
+    a bug - country-level mentions are what this is for."""
+    codes = {gdelt_name_to_iso2(ent.text) for ent in doc.ents if ent.label_ == "GPE"}
+    return sorted(c for c in codes if c)
 
 
 def process_batch(session: Session, batch_size: int = 256) -> int:
@@ -129,11 +142,16 @@ def process_batch(session: Session, batch_size: int = 256) -> int:
     vader = _vader()
 
     for (article, text), emb, (bias_label, bias_score) in zip(todo, embeddings, biases):
+        doc = _spacy()(text)
         article.embedding = emb
         article.sentiment = vader.polarity_scores(text)["compound"]
         article.bias_label = bias_label
         article.bias_score = bias_score
-        article.entities = extract_entities(text)
+        article.entities = _entities_from_doc(doc)
+        if not article.mentioned_countries:
+            # GKG's V2Locations already populated this for firehose-sourced
+            # articles (pipeline/gdelt.py); this is the fallback for the rest
+            article.mentioned_countries = extract_mentioned_countries(doc)
 
     session.commit()
     return len(todo)
