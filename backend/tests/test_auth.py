@@ -120,6 +120,46 @@ def test_preferences_round_trip_and_validation():
         _cleanup(email)
 
 
+def test_preferences_countries_round_trip_validation_and_default():
+    # one signup covering three phases, to stay well under auth's rate limit
+    # (10 signup/login attempts per minute - see auth.py's rate_limit)
+    email, resp = _signup()
+    try:
+        assert resp.status_code == 200
+
+        # countries omitted entirely - request model defaults it, doesn't 422
+        defaulted = client.put(
+            "/api/me/preferences",
+            json={"categories": [], "bias_pref": "balanced"},
+        )
+        assert defaulted.status_code == 200
+        assert defaulted.json()["countries"] == []
+
+        put = client.put(
+            "/api/me/preferences",
+            json={
+                "favourite_category": None,
+                "categories": [],
+                "bias_pref": "balanced",
+                "keywords": [],
+                "countries": ["IN", "BR"],
+            },
+        )
+        assert put.status_code == 200
+        assert set(put.json()["countries"]) == {"IN", "BR"}
+
+        me = client.get("/api/me").json()
+        assert set(me["countries"]) == {"IN", "BR"}
+
+        bad = client.put(
+            "/api/me/preferences",
+            json={"categories": [], "bias_pref": "balanced", "countries": ["ZZ"]},
+        )
+        assert bad.status_code == 400
+    finally:
+        _cleanup(email)
+
+
 def test_logout_clears_session():
     email, resp = _signup()
     try:

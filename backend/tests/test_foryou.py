@@ -12,8 +12,8 @@ from app.models import User
 client = TestClient(app)
 
 
-def _base_kwargs(**overrides):
-    kwargs = dict(
+def _base_kwargs(**overrides) -> dict:
+    kwargs: dict = dict(
         category="economy",
         status="active",
         days_since_seen=1.0,
@@ -45,6 +45,28 @@ def test_keyword_matches_are_capped():
     assert len(matched_many) == 4
     # capped contribution: extra matches beyond 2 add nothing further
     assert score_many - score_one < 2.0 + 0.01
+
+
+def test_category_weight_nudges_score_without_touching_others():
+    baseline, _ = score_story(**_base_kwargs())
+    boosted, _ = score_story(**_base_kwargs(category_weights={"economy": 1.0}))
+    suppressed, _ = score_story(**_base_kwargs(category_weights={"economy": -1.0}))
+    unrelated, _ = score_story(**_base_kwargs(category_weights={"sports": 1.0}))
+    assert boosted == pytest.approx(baseline + 1.0)
+    assert suppressed == pytest.approx(baseline - 1.0)
+    assert unrelated == baseline  # weight for a different category is a no-op
+
+
+def test_country_match_adds_fixed_bonus():
+    no_match, _ = score_story(
+        **_base_kwargs(story_countries={"US"}, user_countries={"IN"})
+    )
+    match, _ = score_story(
+        **_base_kwargs(story_countries={"IN", "US"}, user_countries={"IN"})
+    )
+    neither_set, _ = score_story(**_base_kwargs())
+    assert match == pytest.approx(no_match + 1.5)
+    assert no_match == neither_set  # empty/missing sets behave like "no preference"
 
 
 def test_balanced_vs_challenge_direction():
