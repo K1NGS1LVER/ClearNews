@@ -115,12 +115,32 @@ async function send<T>(method: "POST" | "PUT", path: string, body?: unknown): Pr
   return resp.json();
 }
 
-export const fetchStories = () => get<StoryCard[]>("/stories");
+function qs(params: Record<string, string | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v);
+  if (!entries.length) return "";
+  return "?" + new URLSearchParams(entries as [string, string][]).toString();
+}
+
+export type StoryFilters = { status?: string; source_country?: string; about_country?: string };
+
+export const fetchStories = (filters: StoryFilters = {}) =>
+  get<StoryCard[]>("/stories" + qs(filters));
 export const fetchArc = (id: number) => get<StoryArc>(`/stories/${id}/arc`);
 export const fetchOutlets = (id: number) =>
   get<OutletRow[]>(`/stories/${id}/outlets`);
 export const fetchSearch = (q: string) =>
   get<ArticleOut[]>(`/search?q=${encodeURIComponent(q)}`);
+
+export type CountryInfo = {
+  code: string;
+  name: string;
+  source_article_count: number;
+  story_count: number;
+};
+export const fetchCountries = () => get<CountryInfo[]>("/countries");
+
+export const postStoryFeedback = (id: number, direction: "more" | "less") =>
+  send<{ ok: boolean }>("POST", `/stories/${id}/feedback`, { direction });
 
 export const CATEGORIES = [
   "politics",
@@ -145,6 +165,7 @@ export type Me = {
   categories: Category[];
   bias_pref: BiasPref;
   keywords: string[];
+  countries: string[];
 };
 
 export type ForYouCard = StoryCard & {
@@ -174,9 +195,13 @@ export const putPreferences = (prefs: {
   categories: string[];
   bias_pref: BiasPref;
   keywords: string[];
+  countries: string[];
 }) => send<Me>("PUT", "/me/preferences", prefs);
 
-export const fetchForYou = () => get<ForYouCard[]>("/foryou");
+export type ForYouFilters = { source_country?: string; about_country?: string };
+
+export const fetchForYou = (filters: ForYouFilters = {}) =>
+  get<ForYouCard[]>("/foryou" + qs(filters));
 
 export const fetchStoryExplanation = (id: number) =>
   get<StoryExplanation>(`/stories/${id}/explanation`);

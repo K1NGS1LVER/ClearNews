@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CATEGORIES, type BiasPref, type Category, putPreferences } from "../api";
 import { useMe } from "../auth";
+import CountrySelect from "../components/CountrySelect";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -34,6 +35,7 @@ export default function Welcome() {
   const [categories, setCategories] = useState<Category[]>(me?.categories ?? []);
   const [favourite, setFavourite] = useState<Category | null>(me?.favourite_category ?? null);
   const [biasPref, setBiasPref] = useState<BiasPref>(me?.bias_pref ?? "balanced");
+  const [countries, setCountries] = useState<string[]>(me?.countries ?? []);
   const [keywords, setKeywords] = useState<string[]>(me?.keywords ?? []);
   const [keywordInput, setKeywordInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -74,6 +76,7 @@ export default function Welcome() {
         categories: skip ? [] : categories,
         bias_pref: skip ? "balanced" : biasPref,
         keywords: skip ? [] : keywords,
+        countries: skip ? [] : countries,
       });
       await queryClient.invalidateQueries({ queryKey: ["me"] });
       navigate("/foryou");
@@ -137,6 +140,15 @@ export default function Welcome() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
+          COUNTRIES TO FOLLOW
+        </span>
+        <div className="mt-2.5">
+          <CountrySelect value={countries} onChange={setCountries} />
         </div>
       </div>
 
