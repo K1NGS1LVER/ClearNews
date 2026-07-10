@@ -9,11 +9,13 @@ tone, themes, and a page title buried in the ExtrasXML column.
 import io
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Iterator
 
 import httpx
+
+from pipeline.country_codes import fips_to_iso2
 
 LASTUPDATE_URL = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
 
@@ -22,6 +24,7 @@ _COL_DATE = 1
 _COL_DOMAIN = 3
 _COL_URL = 4
 _COL_THEMES = 7
+_COL_LOCATIONS = 10  # V2Locations
 _COL_TONE = 15
 _COL_TRANSLATION = 25
 _COL_EXTRAS = 26
@@ -38,6 +41,26 @@ class GkgRecord:
     published_at: datetime
     tone: float | None
     themes: list[str]
+    # ISO-2 codes of countries this article's content is about, distinct
+    # from the outlet's own country (see pipeline/ingest.py); [] when
+    # GKG's V2Locations column is empty or has no recognized country code
+    mentioned_countries: list[str] = field(default_factory=list)
+
+
+def _parse_locations(raw: str) -> list[str]:
+    """V2Locations: `;`-separated blocks, each `#`-separated with the FIPS
+    country code as the 3rd field - LocationType#FullName#CountryCode#..."""
+    if not raw:
+        return []
+    codes: set[str] = set()
+    for block in raw.split(";"):
+        fields = block.split("#")
+        if len(fields) < 3:
+            continue
+        iso2 = fips_to_iso2(fields[2])
+        if iso2:
+            codes.add(iso2)
+    return sorted(codes)
 
 
 def fetch_latest_gkg_url(client: httpx.Client | None = None) -> str:
@@ -103,4 +126,5 @@ def parse_gkg(csv_text: str, english_only: bool = True) -> Iterator[GkgRecord]:
             published_at=published_at,
             tone=tone,
             themes=themes,
+            mentioned_countries=_parse_locations(cols[_COL_LOCATIONS]),
         )

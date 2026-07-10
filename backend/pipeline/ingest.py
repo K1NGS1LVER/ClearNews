@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -17,22 +17,34 @@ from app.models import Article, Outlet
 from pipeline.gdelt import GkgRecord, download_gkg, fetch_latest_gkg_url, parse_gkg
 
 
-def _get_outlet_ids(session: Session, domains: set[str]) -> dict[str, int]:
-    """Ensure an outlets row per domain, return domain -> id."""
+def _get_outlet_ids(
+    session: Session, domains: set[str], country: str | None = None
+) -> dict[str, int]:
+    """Ensure an outlets row per domain, return domain -> id.
+
+    `country` (ISO-2) is set on new rows and backfilled onto existing rows
+    that don't have one yet - COALESCE means an outlet's country is never
+    overwritten once known, and callers that don't know a country (e.g. the
+    GKG firehose) can safely omit it without clobbering earlier tagging from
+    pipeline/gdelt_doc.py.
+    """
     if not domains:
         return {}
-    session.execute(
-        pg_insert(Outlet)
-        .values([{"domain": d} for d in domains])
-        .on_conflict_do_nothing(index_elements=["domain"])
+    stmt = pg_insert(Outlet).values([{"domain": d, "country": country} for d in domains])
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["domain"],
+        set_={"country": func.coalesce(Outlet.country, stmt.excluded.country)},
     )
+    session.execute(stmt)
     rows = session.execute(
         select(Outlet.domain, Outlet.id).where(Outlet.domain.in_(domains))
     ).all()
     return dict(rows)
 
 
-def load_records(session: Session, records: Iterable[GkgRecord]) -> int:
+def load_records(
+    session: Session, records: Iterable[GkgRecord], country: str | None = None
+) -> int:
     """Insert records, deduplicating on URL. Returns number of new articles."""
     batch = list(records)
     if not batch:
@@ -44,7 +56,7 @@ def load_records(session: Session, records: Iterable[GkgRecord]) -> int:
         seen.setdefault(r.url, r)
     batch = list(seen.values())
 
-    outlet_ids = _get_outlet_ids(session, {r.domain for r in batch})
+    outlet_ids = _get_outlet_ids(session, {r.domain for r in batch}, country=country)
     result = session.execute(
         pg_insert(Article)
         .values(
@@ -57,6 +69,7 @@ def load_records(session: Session, records: Iterable[GkgRecord]) -> int:
                     "outlet_id": outlet_ids[r.domain],
                     "gdelt_tone": r.tone,
                     "themes": r.themes,
+                    "mentioned_countries": r.mentioned_countries,
                 }
                 for r in batch
             ]
