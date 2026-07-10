@@ -1,8 +1,11 @@
 """Continuous pipeline scheduling.
 
 - every 15 min: pull the latest GDELT GKG file
-- hourly: NLP-enrich new articles, recluster stories
-- nightly: metrics, categories, death-risk training + scoring
+- hourly: poll DOC 2.0 for any countries users have selected, NLP-enrich new
+  articles, recluster stories, refresh metrics (so new-country stories -
+  or any new stories - become feed-ready within about an hour, not just at
+  the nightly run)
+- nightly: categories, death-risk training + scoring
 
 Run: uv run python -m pipeline.scheduler
 """
@@ -15,22 +18,34 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from app.db import SessionLocal
 from pipeline.cluster import run_clustering
 from pipeline.fetch_content import run_backfill_story_images, run_fetch
+from pipeline.gdelt_doc import active_countries, poll_countries
 from pipeline.ingest import ingest_latest
 from pipeline.metrics import run_metrics
 from pipeline.nlp import process_all
 from pipeline.topics import run_topics
 
 
+def poll_active_countries() -> dict:
+    """Demand-driven: only countries at least one user has actually selected
+    get polled - see pipeline/gdelt_doc.py. No country is ever hardcoded."""
+    with SessionLocal() as session:
+        codes = active_countries(session)
+    if not codes:
+        return {}
+    return poll_countries(codes)
+
+
 def hourly() -> None:
+    print(poll_active_countries())
     print(run_fetch())  # full text first so NLP works on content, not titles
     print(run_backfill_story_images())  # keep filling in story thumbnails
     process_all()
     with SessionLocal() as session:
         print(run_clustering(session))
+    print(run_metrics())
 
 
 def nightly() -> None:
-    print(run_metrics())
     print(run_topics())
     # xgboost and torch cannot share a process on macOS (conflicting OpenMP
     # runtimes), so death prediction runs in its own process
