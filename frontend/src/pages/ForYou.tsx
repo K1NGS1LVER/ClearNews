@@ -131,7 +131,7 @@ export default function ForYou() {
 
       <div className="flex gap-4">
         {columns.map((col, i) => (
-          <div key={i} className="flex flex-1 flex-col gap-4">
+          <div key={i} className="flex min-w-0 flex-1 flex-col gap-4">
             {col.map((card) => (
               <Card key={card.id} card={card} />
             ))}
