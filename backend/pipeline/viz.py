@@ -25,7 +25,7 @@ def umap_2d(embeddings: np.ndarray, seed: int = 42) -> np.ndarray:
 
     with _umap_lock:
         return UMAP(
-            n_components=2, n_neighbors=min(15, n - 1), random_state=seed
+            n_components=2, n_neighbors=min(15, n - 1), random_state=seed, n_jobs=1
         ).fit_transform(embeddings)
 
 
