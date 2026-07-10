@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
 from app.models import User, UserSession
 from pipeline.topics import CATEGORY_PROMPTS
@@ -59,6 +60,7 @@ class PreferencesRequest(BaseModel):
     categories: list[str] = []
     bias_pref: str = "balanced"
     keywords: list[str] = []
+    countries: list[str] = []
 
 
 class Me(BaseModel):
@@ -69,6 +71,7 @@ class Me(BaseModel):
     categories: list[str]
     bias_pref: str
     keywords: list[str]
+    countries: list[str]
 
 
 def _me(user: User) -> Me:
@@ -80,6 +83,7 @@ def _me(user: User) -> Me:
         categories=user.categories or [],
         bias_pref=user.bias_pref,
         keywords=user.keywords or [],
+        countries=user.countries or [],
     )
 
 
@@ -200,6 +204,8 @@ def put_preferences(
         raise HTTPException(400, "invalid bias_pref")
     if len(req.keywords) > 20 or any(len(k) > 64 for k in req.keywords):
         raise HTTPException(400, "too many or too long keywords")
+    if not set(req.countries) <= set(SUPPORTED_COUNTRIES):
+        raise HTTPException(400, "unknown country")
 
     if req.display_name:
         user.display_name = req.display_name.strip()
@@ -207,6 +213,10 @@ def put_preferences(
     user.categories = req.categories
     user.bias_pref = req.bias_pref
     user.keywords = req.keywords
+    # no ingestion triggered here - the scheduler picks up newly selected
+    # countries on its next hourly cycle (pipeline/scheduler.py); the API
+    # stays read-only, no enrichment on the request path
+    user.countries = req.countries
     db.commit()
     db.refresh(user)
     return _me(user)

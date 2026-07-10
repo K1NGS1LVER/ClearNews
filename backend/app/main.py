@@ -6,6 +6,7 @@ Run: uv run uvicorn app.main:app --reload
 import json
 import os
 import threading
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any
@@ -15,12 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
 from app.auth import router as auth_router
+from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
-from app.models import Article, Outlet, Story, StoryDailyMetric, User
+from app.models import Article, Outlet, Story, StoryDailyMetric, StoryFeedback, User
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -112,6 +115,17 @@ class OutletRow(BaseModel):
     outlet_overall_bias: float | None
 
 
+class CountryInfo(BaseModel):
+    code: str
+    name: str
+    source_article_count: int  # articles from outlets based in this country
+    story_count: int  # stories about this country (Story.about_countries)
+
+
+class FeedbackRequest(BaseModel):
+    direction: str  # more | less
+
+
 def _article_out(a: Article) -> ArticleOut:
     return ArticleOut(
         id=a.id,
@@ -180,11 +194,77 @@ def _bulk_images(db: Session, story_ids: list[int]) -> dict[int, str]:
     return {row.story_id: row.image_url for row in rows}
 
 
+def _bulk_source_countries(db: Session, story_ids: list[int]) -> dict[int, set[str]]:
+    """Distinct outlet countries (published-from) per story, one query."""
+    if not story_ids:
+        return {}
+    rows = db.execute(
+        select(Article.story_id, Outlet.country)
+        .join(Outlet, Article.outlet_id == Outlet.id)
+        .where(Article.story_id.in_(story_ids), Outlet.country.isnot(None))
+        .distinct()
+    ).all()
+    out: dict[int, set[str]] = defaultdict(set)
+    for row in rows:
+        out[row.story_id].add(row.country)
+    return out
+
+
+def _source_country_filter(country: str):
+    """Stories with >=1 article from an outlet based in `country`."""
+    return Story.id.in_(
+        select(Article.story_id)
+        .join(Outlet, Article.outlet_id == Outlet.id)
+        .where(Outlet.country == country)
+    )
+
+
+@app.get("/api/countries", response_model=list[CountryInfo])
+def list_countries(db: Session = Depends(get_db)):
+    """Every supported country plus how much data actually exists for it -
+    the frontend uses this to populate selectors and drive the empty-state
+    message for countries with little/no coverage yet."""
+    source_counts = dict(
+        db.execute(
+            select(Outlet.country, func.count(Article.id))
+            .join(Article, Article.outlet_id == Outlet.id)
+            .where(Outlet.country.isnot(None))
+            .group_by(Outlet.country)
+        ).all()
+    )
+    about_counts: dict[str, int] = defaultdict(int)
+    rows = db.execute(
+        select(Story.about_countries).where(Story.about_countries.isnot(None))
+    ).all()
+    for (about,) in rows:
+        for code in about or []:
+            about_counts[code] += 1
+
+    return [
+        CountryInfo(
+            code=code,
+            name=name,
+            source_article_count=source_counts.get(code, 0),
+            story_count=about_counts.get(code, 0),
+        )
+        for code, name in sorted(SUPPORTED_COUNTRIES.items(), key=lambda kv: kv[1])
+    ]
+
+
 @app.get("/api/stories", response_model=list[StoryCard])
-def list_stories(status: str | None = None, db: Session = Depends(get_db)):
+def list_stories(
+    status: str | None = None,
+    source_country: str | None = None,
+    about_country: str | None = None,
+    db: Session = Depends(get_db),
+):
     q = select(Story.id, Story.title, Story.status, Story.first_seen, Story.last_seen)
     if status:
         q = q.where(Story.status == status)
+    if source_country:
+        q = q.where(_source_country_filter(source_country))
+    if about_country:
+        q = q.where(Story.about_countries.contains([about_country]))
     stories = db.execute(q).all()
 
     story_ids = [s.id for s in stories]
@@ -233,6 +313,9 @@ def score_story(
     categories: list[str],
     keywords: list[str],
     bias_pref: str,
+    category_weights: dict[str, float] | None = None,
+    story_countries: set[str] | None = None,
+    user_countries: set[str] | None = None,
 ) -> tuple[float, list[str]]:
     """Pure ranking score for a story card given a user's preferences.
 
@@ -244,6 +327,11 @@ def score_story(
     elif category and category in categories:
         score += 1.5
 
+    # nudge from the For You 3-dot "more/less like this" menu (main.py's
+    # story_feedback endpoint), independent of the coarse onboarding pick above
+    if category_weights and category:
+        score += category_weights.get(category, 0.0)
+
     matched = [kw for kw in keywords if kw.lower() in haystack]
     score += min(2.0, 1.0 * len(matched))
 
@@ -251,6 +339,11 @@ def score_story(
 
     if status == "active":
         score += 0.5
+
+    # story_countries covers both source (published-from) and about
+    # (content-about) countries - either kind of match counts
+    if user_countries and story_countries and (story_countries & user_countries):
+        score += 1.5
 
     left = bias_left_share or 0.0
     right = bias_right_share or 0.0
@@ -265,30 +358,55 @@ def score_story(
 
 
 @app.get("/api/foryou", response_model=list[ForYouCard])
-def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def for_you(
+    source_country: str | None = None,
+    about_country: str | None = None,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     from datetime import UTC, datetime
 
     now = datetime.now(UTC)
-    stories = db.execute(
-        select(
-            Story.id,
-            Story.title,
-            Story.status,
-            Story.first_seen,
-            Story.last_seen,
-            Story.category,
-            Story.keyword_haystack,
+    q = select(
+        Story.id,
+        Story.title,
+        Story.status,
+        Story.first_seen,
+        Story.last_seen,
+        Story.category,
+        Story.keyword_haystack,
+        Story.about_countries,
+    )
+    if source_country:
+        q = q.where(_source_country_filter(source_country))
+    if about_country:
+        q = q.where(Story.about_countries.contains([about_country]))
+
+    hidden_ids = set(
+        db.execute(
+            select(StoryFeedback.story_id).where(
+                StoryFeedback.user_id == user.id, StoryFeedback.direction == "less"
+            )
         )
-    ).all()
+        .scalars()
+        .all()
+    )
+    if hidden_ids:
+        q = q.where(Story.id.notin_(hidden_ids))
+
+    stories = db.execute(q).all()
 
     favourite_category = user.favourite_category
     categories = user.categories or []
     keywords = [k.lower() for k in (user.keywords or [])]
     bias_pref = user.bias_pref
+    category_weights = user.category_weights or {}
+    user_countries = set(user.countries or [])
 
     story_ids = [s.id for s in stories]
     metrics = _bulk_metrics(db, story_ids)
     images = _bulk_images(db, story_ids)
+    source_countries = _bulk_source_countries(db, story_ids)
 
     scored: list[tuple[float, list[str], Any, StoryCard]] = []
     for s in stories:
@@ -312,6 +430,7 @@ def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
         # until the next metrics run if a story predates that column
         haystack = s.keyword_haystack or s.title.lower()
         days_since_seen = (now - s.last_seen).total_seconds() / 86400.0
+        story_countries = source_countries.get(s.id, set()) | set(s.about_countries or [])
 
         score, matched = score_story(
             category=s.category,
@@ -324,6 +443,9 @@ def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
             categories=categories,
             keywords=keywords,
             bias_pref=bias_pref,
+            category_weights=category_weights,
+            story_countries=story_countries,
+            user_countries=user_countries,
         )
         scored.append((score, matched, s, card))
 
@@ -359,6 +481,44 @@ def for_you(user: User = Depends(current_user), db: Session = Depends(get_db)):
             )
         )
     return cards
+
+
+@app.post("/api/stories/{story_id}/feedback")
+def story_feedback(
+    story_id: int,
+    req: FeedbackRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """'More/less like this' from the For You 3-dot menu: 'less' hides the
+    story from this user's feed immediately (see the hidden_ids filter in
+    for_you above); both directions nudge the story's category weight,
+    a later 'more' un-hiding a previously-'less'd story via upsert."""
+    if req.direction not in ("more", "less"):
+        raise HTTPException(400, "invalid direction")
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+
+    stmt = pg_insert(StoryFeedback).values(
+        user_id=user.id, story_id=story_id, direction=req.direction
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "story_id"],
+        set_={"direction": stmt.excluded.direction, "created_at": func.now()},
+    )
+    db.execute(stmt)
+
+    if story.category:
+        weights = dict(user.category_weights or {})
+        delta = 0.5 if req.direction == "more" else -0.5
+        weights[story.category] = max(
+            -2.0, min(2.0, weights.get(story.category, 0.0) + delta)
+        )
+        user.category_weights = weights
+
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/stories/{story_id}/arc", response_model=StoryArc)
