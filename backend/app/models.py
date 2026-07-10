@@ -51,11 +51,15 @@ class Story(Base):
     # lowercased title + article entities/themes, kept current by pipeline/metrics.py
     # so /api/foryou can match user keywords without loading every article per request
     keyword_haystack: Mapped[str | None] = mapped_column(Text)
+    # ISO-2 codes mentioned by >=30% of this story's articles (pipeline/metrics.py);
+    # separate from any article's outlet.country (published-from vs. about)
+    about_countries: Mapped[list | None] = mapped_column(JSONB)
 
     articles: Mapped[list["Article"]] = relationship(back_populates="story")
     daily_metrics: Mapped[list["StoryDailyMetric"]] = relationship(
         back_populates="story"
     )
+    feedback: Mapped[list["StoryFeedback"]] = relationship(back_populates="story")
 
 
 class Article(Base):
@@ -86,6 +90,9 @@ class Article(Base):
     bias_explanation: Mapped[dict | None] = mapped_column(JSONB)  # SHAP payload, see pipeline/explain.py
     entities: Mapped[dict | None] = mapped_column(JSONB)  # spaCy NER output
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
+    # ISO-2 codes of countries this article's content is about (GKG V2Locations,
+    # falling back to spaCy GPE entities); distinct from outlet.country (published-from)
+    mentioned_countries: Mapped[list | None] = mapped_column(JSONB)
 
     outlet: Mapped[Outlet] = relationship(back_populates="articles")
     story: Mapped[Story | None] = relationship(back_populates="articles")
@@ -122,12 +129,18 @@ class User(Base):
     categories: Mapped[list | None] = mapped_column(JSONB, default=list)
     bias_pref: Mapped[str] = mapped_column(String(16), default="balanced")  # balanced | everything | challenge
     keywords: Mapped[list | None] = mapped_column(JSONB, default=list)
+    countries: Mapped[list | None] = mapped_column(JSONB, default=list)  # ISO-2 codes
+    # per-category ranking nudge from the For You 3-dot menu, -2..+2, see pipeline/scheduler
+    category_weights: Mapped[dict | None] = mapped_column(JSONB, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     sessions: Mapped[list["UserSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    story_feedback: Mapped[list["StoryFeedback"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -141,3 +154,22 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class StoryFeedback(Base):
+    """A user's 'more/less like this' click on a For You card (main.py score_story
+    excludes 'less' stories and nudges User.category_weights toward the direction)."""
+
+    __tablename__ = "story_feedback"
+    __table_args__ = (UniqueConstraint("user_id", "story_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    story_id: Mapped[int] = mapped_column(ForeignKey("stories.id"), index=True)
+    direction: Mapped[str] = mapped_column(String(8))  # more | less
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    user: Mapped[User] = relationship(back_populates="story_feedback")
+    story: Mapped[Story] = relationship(back_populates="feedback")
