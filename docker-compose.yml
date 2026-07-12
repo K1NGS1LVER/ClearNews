@@ -39,7 +39,14 @@ services:
     image: searxng/searxng:latest
     environment:
       SEARXNG_BASE_URL: http://localhost:8080/
+      # Dev default so `docker compose up` works with no extra setup; override
+      # in a real deployment (any random string - only used to sign sessions).
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-clearnews-dev-searxng-secret-change-me}
     volumes:
+      # Turns on the JSON API the web_search tool needs (off by default) -
+      # see searxng/settings.yml. Not read-only: the image's entrypoint
+      # substitutes the secret_key placeholder in place on container start.
+      - ./searxng/settings.yml:/etc/searxng/settings.yml
       - searxng-data:/etc/searxng
     ports:
       - "8080:8080"

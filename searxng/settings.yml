@@ -1,0 +1,15 @@
+# Minimal override, merged onto SearXNG's shipped defaults (use_default_settings)
+# rather than replacing them - we only need to turn on the JSON API that the
+# ClearNews web_search agent tool depends on. It's off by default on a stock
+# image: https://docs.searxng.org/dev/search_api.html
+use_default_settings: true
+
+server:
+  # docker-entrypoint.sh substitutes this placeholder with $SEARXNG_SECRET at
+  # container start - see the SEARXNG_SECRET env var in docker-compose.yml.
+  secret_key: "ultrasecretkey"
+
+search:
+  formats:
+    - html
+    - json

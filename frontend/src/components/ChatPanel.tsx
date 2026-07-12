@@ -19,16 +19,22 @@ const mono = { fontFamily: "var(--font-mono)" } as const;
 const leanColor = (label: string | null) =>
   label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--ink-muted)";
 
-/** Render assistant text with [n] citation markers as small mono chips
-    that resolve against the message's sources list. */
+/** Render assistant text with [n] archive and [web:n] live-web citation
+    markers as small mono chips that resolve against the message's sources
+    list. The two stay visually distinct: web chips are outlined, not filled,
+    so a reader can tell archive evidence from live-web reporting at a glance. */
 function CitedText({ content, sources }: { content: string; sources?: Source[] }) {
-  const parts = content.split(/(\[\d+\])/g);
+  const parts = content.split(/(\[\d+\]|\[web:\d+\])/g);
   return (
     <>
       {parts.map((part, i) => {
-        const m = /^\[(\d+)\]$/.exec(part);
-        if (!m) return <span key={i}>{part}</span>;
-        const found = sources?.some((s) => s.article_id === Number(m[1]));
+        const web = /^\[web:(\d+)\]$/.exec(part);
+        const archive = web ? null : /^\[(\d+)\]$/.exec(part);
+        if (!web && !archive) return <span key={i}>{part}</span>;
+        const label = web ? web[1] : archive![1];
+        const found = web
+          ? sources?.some((s) => s.citation_id === `web:${label}`)
+          : sources?.some((s) => s.article_id === Number(label));
         return (
           <span
             key={i}
@@ -36,14 +42,15 @@ function CitedText({ content, sources }: { content: string; sources?: Source[] }
               ...mono,
               fontSize: 10,
               fontWeight: 600,
-              background: "var(--chip-center-bg)",
+              background: web ? "transparent" : "var(--chip-center-bg)",
+              border: web ? `1px solid ${found ? "var(--ink-muted)" : "var(--border)"}` : undefined,
               color: found ? "var(--ink)" : "var(--ink-muted)",
               borderRadius: 4,
-              padding: "1px 5px",
+              padding: web ? "0px 4px" : "1px 5px",
               margin: "0 1px",
             }}
           >
-            {m[1]}
+            {web ? `w${label}` : label}
           </span>
         );
       })}
@@ -220,31 +227,40 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-2.5 flex flex-col" style={{ borderTop: "1px solid var(--hair)" }}>
                   <span className="pb-1.5 pt-2" style={{ ...mono, fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-                    SOURCES — {m.sources.length} ARTICLES
+                    SOURCES — {m.sources.length}
                   </span>
-                  {m.sources.map((s) => (
-                    <a
-                      key={s.article_id ?? s.citation_id}
-                      href={s.source_type === "web" ? s.url : `/article/${s.article_id}`}
-                      target={s.source_type === "web" ? "_blank" : undefined}
-                      rel={s.source_type === "web" ? "noreferrer" : undefined}
-                      className="flex gap-2 py-1.5"
-                      style={{ borderTop: "1px solid var(--hair)" }}
-                    >
-                      <span style={{ ...mono, fontSize: 10, fontWeight: 600, color: "var(--ink)" }}>{s.article_id ?? s.citation_id}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium" style={{ color: "var(--ink)" }}>
-                          {s.title ? decodeEntities(s.title) : s.url}
+                  {m.sources.map((s) => {
+                    const isWeb = s.source_type === "web";
+                    return (
+                      <a
+                        key={s.article_id ?? s.citation_id}
+                        href={isWeb ? s.url : `/article/${s.article_id}`}
+                        target={isWeb ? "_blank" : undefined}
+                        rel={isWeb ? "noreferrer" : undefined}
+                        className="flex gap-2 py-1.5"
+                        style={{ borderTop: "1px solid var(--hair)" }}
+                      >
+                        <span style={{ ...mono, fontSize: 10, fontWeight: 600, color: "var(--ink)" }}>
+                          {isWeb ? `w${s.citation_id?.split(":")[1]}` : s.article_id}
                         </span>
-                        <span style={{ ...mono, fontSize: "9.5px", color: "var(--ink-muted)" }}>
-                          <span style={{ color: leanColor(s.bias_label), fontWeight: 600 }}>
-                            {(s.bias_label ?? "n/a").toUpperCase()}
-                          </span>{" "}
-                          · {s.outlet}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium" style={{ color: "var(--ink)" }}>
+                            {s.title ? decodeEntities(s.title) : s.url}
+                          </span>
+                          <span style={{ ...mono, fontSize: "9.5px", color: "var(--ink-muted)" }}>
+                            {isWeb ? (
+                              <span style={{ color: "var(--ink-muted)", fontWeight: 600 }}>LIVE WEB</span>
+                            ) : (
+                              <span style={{ color: leanColor(s.bias_label), fontWeight: 600 }}>
+                                {(s.bias_label ?? "n/a").toUpperCase()}
+                              </span>
+                            )}{" "}
+                            · {s.outlet}
+                          </span>
                         </span>
-                      </span>
-                    </a>
-                  ))}
+                      </a>
+                    );
+                  })}
                 </div>
               )}
             </div>
