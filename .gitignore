@@ -24,3 +24,8 @@ backend/pipeline/data/
 
 # mac os ds store
 .DS_Store
+
+# AI agent tooling - local only, not part of the shipped project
+CLAUDE.md
+.claude/
+.superpowers/
