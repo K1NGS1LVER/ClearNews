@@ -1,4 +1,6 @@
-export default function Loading({ label, compact }: { label?: string; compact?: boolean }) {
+import { withErrorBoundary } from "./ErrorBoundary";
+
+function Loading({ label, compact }: { label?: string; compact?: boolean }) {
   return (
     <div
       className={`flex flex-col items-center justify-center w-full ${compact ? "py-6" : "min-h-screen p-8"}`}
@@ -13,3 +15,5 @@ export default function Loading({ label, compact }: { label?: string; compact?: 
     </div>
   );
 }
+
+export default withErrorBoundary(Loading, "Loading");

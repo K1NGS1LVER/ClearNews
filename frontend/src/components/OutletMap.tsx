@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { scaleLinear, scaleSqrt } from "d3";
 import { useState } from "react";
+import { withErrorBoundary } from "./ErrorBoundary";
 import Loading from "./Loading";
 
 type OutletPoint = {
@@ -23,7 +24,7 @@ const biasScale = scaleLinear<string>(
 
 /** Outlets positioned by the similarity of what they publish (UMAP of mean
     embeddings). Nearby outlets cover news similarly; color = political lean. */
-export default function OutletMap() {
+function OutletMap() {
   const { data } = useQuery<{ outlets: OutletPoint[] }>({
     queryKey: ["outletMap"],
     queryFn: () => fetch("/api/outlets/map").then((r) => r.json()),
@@ -96,3 +97,5 @@ export default function OutletMap() {
     </div>
   );
 }
+
+export default withErrorBoundary(OutletMap, "OutletMap");

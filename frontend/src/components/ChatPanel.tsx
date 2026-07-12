@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { decodeEntities } from "../api";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 type Source = {
   article_id: number;
@@ -51,7 +52,7 @@ function CitedText({ content, sources }: { content: string; sources?: Source[] }
 /** Chat with the ClearNews agent. story_id scopes retrieval to one story.
     fill: stretch to the parent's height instead of a fixed 28rem - used
     when embedded in the floating Ask sidebar/sheet. */
-export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
+function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -275,3 +276,5 @@ export default function ChatPanel({ storyId, fill }: { storyId?: number; fill?: 
     </div>
   );
 }
+
+export default withErrorBoundary(ChatPanel, "ChatPanel");

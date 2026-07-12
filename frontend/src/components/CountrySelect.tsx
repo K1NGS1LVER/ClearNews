@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { fetchCountries } from "../api";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
@@ -8,7 +9,7 @@ const mono = { fontFamily: "var(--font-mono)" } as const;
     never hardcoded - every country GDELT can be polled for is selectable,
     and ones with no data yet are labeled rather than hidden (see
     pipeline/gdelt_doc.py: coverage only exists once a user picks it). */
-export default function CountrySelect({
+function CountrySelect({
   value,
   onChange,
 }: {
@@ -94,3 +95,5 @@ export default function CountrySelect({
     </div>
   );
 }
+
+export default withErrorBoundary(CountrySelect, "CountrySelect");

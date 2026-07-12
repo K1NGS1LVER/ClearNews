@@ -3,6 +3,7 @@ import { type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { logout } from "./api";
 import { useMe } from "./auth";
+import { PageErrorBoundary } from "./components/ErrorBoundary";
 import Analytics from "./pages/Analytics";
 import Article from "./pages/Article";
 import Chat from "./pages/Chat";
@@ -34,6 +35,14 @@ const pillStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? "var(--navpill-ink)" : "var(--ink-2)",
 });
 
+function page(name: string, element: ReactNode, resetKey: string) {
+  return (
+    <PageErrorBoundary name={name} resetKey={resetKey}>
+      {element}
+    </PageErrorBoundary>
+  );
+}
+
 /** Signed-in users land on their personalized feed; signed-out users see the landing page. */
 function Root() {
   const { data: me, isLoading } = useMe();
@@ -60,7 +69,7 @@ export default function App() {
   if (hideShell) {
     return (
       <Routes>
-        <Route path="/" element={<Root />} />
+        <Route path="/" element={page("Home", <Root />, pathname)} />
       </Routes>
     );
   }
@@ -160,30 +169,34 @@ export default function App() {
 
       <main className="pb-16 md:pb-0">
         <Routes>
-          <Route path="/" element={<Root />} />
-          <Route path="/stories" element={<Feed />} />
-          <Route path="/story/:id" element={<Story />} />
-          <Route path="/article/:id" element={<Article />} />
-          <Route path="/search" element={<Search />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+          <Route path="/" element={page("Home", <Root />, pathname)} />
+          <Route path="/stories" element={page("Stories", <Feed />, pathname)} />
+          <Route path="/story/:id" element={page("Story", <Story />, pathname)} />
+          <Route path="/article/:id" element={page("Article", <Article />, pathname)} />
+          <Route path="/search" element={page("Search", <Search />, pathname)} />
+          <Route path="/analytics" element={page("Analytics", <Analytics />, pathname)} />
+          <Route path="/chat" element={page("Chat", <Chat />, pathname)} />
+          <Route path="/login" element={page("Login", <Login />, pathname)} />
+          <Route path="/signup" element={page("Signup", <Signup />, pathname)} />
           <Route
             path="/welcome"
-            element={
+            element={page(
+              "Welcome",
               <RequireAuth>
                 <Welcome />
-              </RequireAuth>
-            }
+              </RequireAuth>,
+              pathname,
+            )}
           />
           <Route
             path="/foryou"
-            element={
+            element={page(
+              "For You",
               <RequireAuth>
                 <ForYou />
-              </RequireAuth>
-            }
+              </RequireAuth>,
+              pathname,
+            )}
           />
         </Routes>
       </main>

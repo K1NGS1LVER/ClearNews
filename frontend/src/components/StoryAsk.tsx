@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ChatPanel from "./ChatPanel";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -36,7 +37,7 @@ function ScopeLabel({ articleCount }: { articleCount?: number }) {
     close/reopen and even a resize across the breakpoint. A separate,
     invisible flex spacer (desktop only) reserves the sidebar's width so
     the page content narrows/pushes over instead of being covered. */
-export default function StoryAsk({
+function StoryAsk({
   storyId,
   articleCount,
   children,
@@ -97,3 +98,5 @@ export default function StoryAsk({
     </div>
   );
 }
+
+export default withErrorBoundary(StoryAsk, "StoryAsk");

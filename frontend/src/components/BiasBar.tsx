@@ -1,3 +1,5 @@
+import { withErrorBoundary } from "./ErrorBoundary";
+
 type Props = {
   left: number | null;
   center: number | null;
@@ -6,7 +8,7 @@ type Props = {
 };
 
 /** Left/center/right coverage share as a 3-segment bar (2px surface gaps). */
-export default function BiasBar({ left, center, right, showLabels }: Props) {
+function BiasBar({ left, center, right, showLabels }: Props) {
   const l = left ?? 0;
   const c = center ?? 0;
   const r = right ?? 0;
@@ -36,3 +38,5 @@ export default function BiasBar({ left, center, right, showLabels }: Props) {
     </div>
   );
 }
+
+export default withErrorBoundary(BiasBar, "BiasBar");

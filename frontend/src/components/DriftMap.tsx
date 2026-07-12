@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { scaleLinear } from "d3";
 import { useState } from "react";
+import { withErrorBoundary } from "./ErrorBoundary";
 import Loading from "./Loading";
 
 type DriftPoint = {
@@ -24,7 +25,7 @@ const PAD = 24;
 
 /** Articles in 2D embedding space; the line is the daily narrative centroid.
     A straight line = stable framing, a bend = the story pivoted. */
-export default function DriftMap({ storyId }: { storyId: number }) {
+function DriftMap({ storyId }: { storyId: number }) {
   const { data } = useQuery<Drift>({
     queryKey: ["drift", storyId],
     queryFn: () => fetch(`/api/stories/${storyId}/drift`).then((r) => r.json()),
@@ -96,3 +97,5 @@ export default function DriftMap({ storyId }: { storyId: number }) {
     </div>
   );
 }
+
+export default withErrorBoundary(DriftMap, "DriftMap");

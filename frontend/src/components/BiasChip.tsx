@@ -1,6 +1,8 @@
+import { withErrorBoundary } from "./ErrorBoundary";
+
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
-export default function BiasChip({ label }: { label: string | null }) {
+function BiasChip({ label }: { label: string | null }) {
   if (!label) return null;
   const bg = label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)";
   const ink = label === "center" ? "var(--chip-center-ink)" : "#fff";
@@ -13,3 +15,5 @@ export default function BiasChip({ label }: { label: string | null }) {
     </span>
   );
 }
+
+export default withErrorBoundary(BiasChip, "BiasChip");

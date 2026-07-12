@@ -1,7 +1,9 @@
+import { withErrorBoundary } from "./ErrorBoundary";
+
 /** Tiny inline lifecycle bar chart for story cards. Pure SVG, no axes.
     Hidden until the story spans at least two days - a single bar reads
     as a rendering artifact, not a chart. */
-export default function Sparkline({ counts }: { counts: number[] }) {
+function Sparkline({ counts }: { counts: number[] }) {
   if (counts.length < 2) return null;
   const w = 120;
   const h = 28;
@@ -26,3 +28,5 @@ export default function Sparkline({ counts }: { counts: number[] }) {
     </svg>
   );
 }
+
+export default withErrorBoundary(Sparkline, "Sparkline");

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchCountries } from "../api";
 import type { Filters } from "../lib/filters";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
@@ -29,7 +30,7 @@ function pillGroup<T extends string | null>(
   );
 }
 
-export default function FilterBar({
+function FilterBar({
   filters,
   onChange,
   showStatus = false,
@@ -82,7 +83,7 @@ export default function FilterBar({
   );
 }
 
-export function CountryEmptyState({ countryName }: { countryName: string }) {
+function CountryEmptyStateComponent({ countryName }: { countryName: string }) {
   return (
     <div className="flex flex-col items-center gap-1.5 rounded-xl py-16 text-center" style={{ border: "1px dashed var(--input-border)" }}>
       <span style={{ ...mono, fontSize: 11, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
@@ -94,3 +95,6 @@ export function CountryEmptyState({ countryName }: { countryName: string }) {
     </div>
   );
 }
+
+export const CountryEmptyState = withErrorBoundary(CountryEmptyStateComponent, "CountryEmptyState");
+export default withErrorBoundary(FilterBar, "FilterBar");

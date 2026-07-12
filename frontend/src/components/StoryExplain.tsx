@@ -12,6 +12,7 @@ import {
 } from "../api";
 import BiasBar from "./BiasBar";
 import BiasChip from "./BiasChip";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -26,7 +27,7 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export default function StoryExplain({ storyId }: { storyId: number }) {
+function StoryExplain({ storyId }: { storyId: number }) {
   const [state, setState] = useState<StoryExplanation | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -283,3 +284,5 @@ function HighlightedText({
     </div>
   );
 }
+
+export default withErrorBoundary(StoryExplain, "StoryExplain");

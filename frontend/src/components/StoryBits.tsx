@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { StoryCard } from "../api";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 const statusColor: Record<string, string> = {
   active: "var(--status-active)",
@@ -17,7 +18,7 @@ function lifespanDays(firstSeen: string, lastSeen: string) {
 
 /** Status + momentum line: dot/status/count for active & fading, a closed
     summary for dead stories (matches the dc.html "row 4 dead" treatment). */
-export function MetaLine({ s }: { s: StoryCard }) {
+function MetaLineComponent({ s }: { s: StoryCard }) {
   const mono = { fontFamily: "var(--font-mono)", fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" };
 
   if (s.status === "dead") {
@@ -57,7 +58,7 @@ export function MetaLine({ s }: { s: StoryCard }) {
 }
 
 /** Thin 3-segment bias bar + numeric split, sized to sit inline in a row. */
-export function LeanBar({ left, center, right }: { left: number | null; center: number | null; right: number | null }) {
+function LeanBarComponent({ left, center, right }: { left: number | null; center: number | null; right: number | null }) {
   const l = left ?? 0;
   const c = center ?? 0;
   const r = right ?? 0;
@@ -77,7 +78,7 @@ export function LeanBar({ left, center, right }: { left: number | null; center: 
   );
 }
 
-export function Thumb({ src, dead, className }: { src: string | null; dead?: boolean; className?: string }) {
+function ThumbComponent({ src, dead, className }: { src: string | null; dead?: boolean; className?: string }) {
   const [broken, setBroken] = useState(false);
   const cls = className ?? "h-[110px] w-full shrink-0 object-cover sm:ml-5 sm:my-3.5 sm:h-[66px] sm:w-24 sm:rounded-md";
   if (src && !broken) {
@@ -119,3 +120,7 @@ export function Thumb({ src, dead, className }: { src: string | null; dead?: boo
     </div>
   );
 }
+
+export const MetaLine = withErrorBoundary(MetaLineComponent, "MetaLine");
+export const LeanBar = withErrorBoundary(LeanBarComponent, "LeanBar");
+export const Thumb = withErrorBoundary(ThumbComponent, "Thumb");

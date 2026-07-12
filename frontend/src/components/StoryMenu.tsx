@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { postStoryFeedback } from "../api";
+import { withErrorBoundary } from "./ErrorBoundary";
 
 /** 3-dot "more/less like this" menu for a For You card. The wrapping div's
     onClick stops propagation so a click anywhere in the menu (button or
     backdrop) doesn't fall through to the card's <Link> and navigate. */
-export default function StoryMenu({
+function StoryMenu({
   storyId,
   onLess,
 }: {
@@ -82,3 +83,5 @@ export default function StoryMenu({
     </div>
   );
 }
+
+export default withErrorBoundary(StoryMenu, "StoryMenu");
