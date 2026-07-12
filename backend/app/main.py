@@ -32,7 +32,21 @@ async def lifespan(_: FastAPI):
     from pipeline.scheduler import check_single_openmp
     from pipeline.nlp import _embedder
 
+    from app.db import SessionLocal, engine
+    from app.models import Article, Base
+
+    Base.metadata.create_all(engine)
     check_single_openmp()
+
+    # auto-bootstrap: if the DB has no articles, run the full pipeline
+    with SessionLocal() as session:
+        empty = session.execute(select(func.count(Article.id))).scalar() == 0
+    if empty:
+        import logging
+        logging.getLogger("uvicorn").info("empty database detected, running bootstrap...")
+        from pipeline.bootstrap import bootstrap
+        bootstrap()
+
     threading.Thread(target=_embedder, daemon=True).start()
     yield
 
