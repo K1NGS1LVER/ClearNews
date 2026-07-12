@@ -23,7 +23,11 @@ from app.auth import current_user
 from app.auth import router as auth_router
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
-from app.models import Article, Outlet, Story, StoryDailyMetric, StoryFeedback, User
+from app.models import (
+    Article, ChatMessage as StoredChatMessage, ChatSession, Outlet, Story,
+    StoryDailyMetric, StoryFeedback, User,
+)
+from app.retrieval import hybrid_search
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -764,20 +768,7 @@ def story_explanation_step(
 
 @app.get("/api/search", response_model=list[ArticleOut])
 def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
-    from pipeline.nlp import _embedder
-
-    query_vec = _embedder().encode(q)
-    articles = (
-        db.execute(
-            select(Article)
-            .where(Article.embedding.isnot(None))
-            .order_by(Article.embedding.cosine_distance(query_vec))
-            .limit(limit)
-        )
-        .scalars()
-        .all()
-    )
-    return [_article_out(a) for a in articles]
+    return [_article_out(a) for a in hybrid_search(db, q, limit=min(max(limit, 1), 100))]
 
 
 class ArticleDetail(ArticleOut):
@@ -881,23 +872,151 @@ def outlet_map(min_articles: int = 3, db: Session = Depends(get_db)):
     }
 
 
-class ChatMessage(BaseModel):
-    role: str  # "user" | "assistant"
+class ChatRequest(BaseModel):
+    session_id: int
     content: str
 
 
-class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+class CreateChatSessionRequest(BaseModel):
     story_id: int | None = None
+    title: str | None = None
+
+
+class RenameChatSessionRequest(BaseModel):
+    title: str
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    citations: list | None
+    created_at: str
+
+
+class ChatSessionOut(BaseModel):
+    id: int
+    story_id: int | None
+    title: str
+    created_at: str
+    updated_at: str
+    messages: list[ChatMessageOut] | None = None
+
+
+def _chat_session(db: Session, session_id: int, user_id: int) -> ChatSession:
+    session = db.execute(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    ).scalar_one_or_none()
+    if not session:
+        # Deliberately do not reveal whether another user's id exists.
+        raise HTTPException(404, "chat session not found")
+    return session
+
+
+def _chat_session_out(session: ChatSession, include_messages: bool = False) -> ChatSessionOut:
+    return ChatSessionOut(
+        id=session.id, story_id=session.story_id, title=session.title,
+        created_at=session.created_at.isoformat(), updated_at=session.updated_at.isoformat(),
+        messages=[ChatMessageOut(id=m.id, role=m.role, content=m.content, citations=m.citations,
+                                 created_at=m.created_at.isoformat()) for m in session.messages]
+        if include_messages else None,
+    )
+
+
+@app.get("/api/chat/sessions", response_model=list[ChatSessionOut])
+def list_chat_sessions(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    sessions = db.execute(
+        select(ChatSession).where(ChatSession.user_id == user.id).order_by(ChatSession.updated_at.desc())
+    ).scalars().all()
+    return [_chat_session_out(session) for session in sessions]
+
+
+@app.post("/api/chat/sessions", response_model=ChatSessionOut, status_code=201)
+def create_chat_session(req: CreateChatSessionRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if req.story_id is not None and not db.get(Story, req.story_id):
+        raise HTTPException(404, "story not found")
+    title = (req.title or "New conversation").strip()[:200] or "New conversation"
+    session = ChatSession(user_id=user.id, story_id=req.story_id, title=title)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return _chat_session_out(session)
+
+
+@app.get("/api/chat/sessions/{session_id}", response_model=ChatSessionOut)
+def read_chat_session(session_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    session = _chat_session(db, session_id, user.id)
+    # relationship's defined ordering keeps the transcript deterministic.
+    _ = session.messages
+    return _chat_session_out(session, include_messages=True)
+
+
+@app.patch("/api/chat/sessions/{session_id}", response_model=ChatSessionOut)
+def rename_chat_session(session_id: int, req: RenameChatSessionRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    title = req.title.strip()[:200]
+    if not title:
+        raise HTTPException(400, "title is required")
+    session = _chat_session(db, session_id, user.id)
+    session.title = title
+    db.commit()
+    db.refresh(session)
+    return _chat_session_out(session)
+
+
+@app.delete("/api/chat/sessions/{session_id}")
+def delete_chat_session(session_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    session = _chat_session(db, session_id, user.id)
+    db.delete(session)
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     from agent.chat import stream_chat
 
+    content = req.content.strip()
+    if not content:
+        raise HTTPException(400, "message is required")
+    session = _chat_session(db, req.session_id, user.id)
+    position = len(session.messages)
+    db.add(StoredChatMessage(session_id=session.id, position=position, role="user", content=content))
+    if session.title == "New conversation":
+        session.title = content[:200]
+    db.commit()
+    # Build context only from this user's persisted session; client-provided
+    # history cannot smuggle messages from another session into the prompt.
+    history = [
+        {"role": message.role, "content": message.content}
+        for message in session.messages
+    ]
+
     async def sse():
-        async for event in stream_chat([m.model_dump() for m in req.messages], req.story_id):
+        answer: list[str] = []
+        citations: list[dict] = []
+        async for event in stream_chat(history, session.story_id):
+            if event["type"] == "token":
+                answer.append(event["content"])
+            elif event["type"] == "sources":
+                citations = event["sources"]
+            elif event["type"] == "error":
+                answer.append(("\n\n" if answer else "") + event["message"])
             yield f"data: {json.dumps(event)}\n\n"
+        final = "".join(answer)
+        if final:
+            # The request dependency is closed after StreamingResponse returns;
+            # use a short-lived session to persist the completed answer.
+            from app.db import SessionLocal
+            with SessionLocal() as write_db:
+                write_db.add(StoredChatMessage(
+                    session_id=req.session_id, position=position + 1, role="assistant",
+                    content=final, citations=citations or None,
+                ))
+                stored = write_db.get(ChatSession, req.session_id)
+                if stored:
+                    from datetime import UTC, datetime
+                    stored.updated_at = datetime.now(UTC)
+                write_db.commit()
         yield "data: {\"type\": \"done\"}\n\n"
 
     return StreamingResponse(sse(), media_type="text/event-stream")

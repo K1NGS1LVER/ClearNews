@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Computed,
     Date,
     DateTime,
     Float,
@@ -11,7 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
@@ -93,6 +94,15 @@ class Article(Base):
     # ISO-2 codes of countries this article's content is about (GKG V2Locations,
     # falling back to spaCy GPE entities); distinct from outlet.country (published-from)
     mentioned_countries: Mapped[list | None] = mapped_column(JSONB)
+    # PostgreSQL-maintained multilingual-safe lexical document. ``simple`` is
+    # deliberate: the archive is not limited to English.
+    search_document: Mapped[object | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, ''))",
+            persisted=True,
+        ),
+    )
 
     outlet: Mapped[Outlet] = relationship(back_populates="articles")
     story: Mapped[Story | None] = relationship(back_populates="articles")
@@ -143,6 +153,9 @@ class User(Base):
     story_feedback: Mapped[list["StoryFeedback"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class UserSession(Base):
@@ -173,3 +186,45 @@ class StoryFeedback(Base):
 
     user: Mapped[User] = relationship(back_populates="story_feedback")
     story: Mapped[Story] = relationship(back_populates="feedback")
+
+
+class ChatSession(Base):
+    """A saved assistant conversation, owned by exactly one user."""
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    story_id: Mapped[int | None] = mapped_column(ForeignKey("stories.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="New conversation")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC), index=True,
+    )
+
+    user: Mapped[User] = relationship(back_populates="chat_sessions")
+    story: Mapped[Story | None] = relationship()
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan",
+        order_by="ChatMessage.position",
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (UniqueConstraint("session_id", "position"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    role: Mapped[str] = mapped_column(String(16))  # user | assistant
+    content: Mapped[str] = mapped_column(Text)
+    citations: Mapped[list | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    session: Mapped[ChatSession] = relationship(back_populates="messages")

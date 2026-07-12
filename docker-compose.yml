@@ -5,6 +5,10 @@ x-backend-image: &backend-image
     - ./backend/.env
   environment:
     DATABASE_URL: postgresql+psycopg://clearnews:clearnews@db:5432/clearnews
+    # Self-hosted default for the live-web agent tool. Override WEB_SEARCH_PROVIDER
+    # plus a key only when deliberately opting into Tavily or Brave.
+    WEB_SEARCH_PROVIDER: searxng
+    SEARXNG_URL: http://searxng:8080
   depends_on:
     db:
       condition: service_healthy
@@ -31,6 +35,15 @@ services:
     ports:
       - "8000:8000"
 
+  searxng:
+    image: searxng/searxng:latest
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8080/
+    volumes:
+      - searxng-data:/etc/searxng
+    ports:
+      - "8080:8080"
+
   # ingestion, NLP, clustering, nightly metrics/death-risk - see pipeline/scheduler.py
   scheduler:
     <<: *backend-image
@@ -50,3 +63,4 @@ services:
 
 volumes:
   pgdata:
+  searxng-data:

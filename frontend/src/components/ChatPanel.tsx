@@ -3,7 +3,9 @@ import { decodeEntities } from "../api";
 import { withErrorBoundary } from "./ErrorBoundary";
 
 type Source = {
-  article_id: number;
+  article_id?: number;
+  citation_id?: string;
+  source_type?: "archive" | "web";
   title: string | null;
   url: string;
   outlet: string;
@@ -59,6 +61,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const [suggested, setSuggested] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
 
   useEffect(() => {
     if (storyId) {
@@ -84,13 +87,24 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     abortRef.current = controller;
 
     try {
+      let activeSessionId = sessionId;
+      if (activeSessionId === null) {
+        const created = await fetch("/api/chat/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ story_id: storyId ?? null }),
+        });
+        if (!created.ok) throw new Error(`session failed: ${created.status}`);
+        activeSessionId = (await created.json()).id;
+        setSessionId(activeSessionId);
+      }
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          messages: history.map(({ role, content }) => ({ role, content })),
-          story_id: storyId ?? null,
+          session_id: activeSessionId,
+          content: text,
         }),
       });
       if (!resp.ok || !resp.body) throw new Error(`chat failed: ${resp.status}`);
@@ -157,7 +171,9 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
 
   function clearHistory() {
     if (!window.confirm("Clear this conversation?")) return;
+    if (sessionId !== null) fetch(`/api/chat/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
     setMessages([]);
+    setSessionId(null);
     setSuggested([]);
   }
 
@@ -208,12 +224,14 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                   </span>
                   {m.sources.map((s) => (
                     <a
-                      key={s.article_id}
-                      href={`/article/${s.article_id}`}
+                      key={s.article_id ?? s.citation_id}
+                      href={s.source_type === "web" ? s.url : `/article/${s.article_id}`}
+                      target={s.source_type === "web" ? "_blank" : undefined}
+                      rel={s.source_type === "web" ? "noreferrer" : undefined}
                       className="flex gap-2 py-1.5"
                       style={{ borderTop: "1px solid var(--hair)" }}
                     >
-                      <span style={{ ...mono, fontSize: 10, fontWeight: 600, color: "var(--ink)" }}>{s.article_id}</span>
+                      <span style={{ ...mono, fontSize: 10, fontWeight: 600, color: "var(--ink)" }}>{s.article_id ?? s.citation_id}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium" style={{ color: "var(--ink)" }}>
                           {s.title ? decodeEntities(s.title) : s.url}
