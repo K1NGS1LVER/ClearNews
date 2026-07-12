@@ -6,5 +6,6 @@ export function useMe() {
     queryKey: ["me"],
     queryFn: fetchMe,
     staleTime: 60_000,
+    retry: false,
   });
 }
