@@ -1,15 +1,14 @@
 """Signup / login / logout / me / preferences — cookie session auth."""
 
 import os
+import re
 import secrets
-import time
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
-from pydantic import BaseModel
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
 from app.models import User, UserSession
+from app.ratelimit import rate_limit_auth
 from pipeline.topics import CATEGORY_PROMPTS
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -26,27 +26,21 @@ SESSION_MAX_AGE = 30 * 86400
 IS_PRODUCTION = os.getenv("ENV") == "production"
 hasher = PasswordHasher()
 
-# In-process fixed-window limiter: 10 attempts/min/IP on login+signup. Good
-# enough for this single-instance deployment; a multi-worker/replica setup
-# would need a shared store (e.g. Redis) instead.
-RATE_LIMIT = 10
-RATE_WINDOW_SECONDS = 60
-_attempts: dict[str, list[float]] = defaultdict(list)
-
-
-def rate_limit(request: Request) -> None:
-    key = request.client.host if request.client else "unknown"
-    now = time.monotonic()
-    window = _attempts[key] = [t for t in _attempts[key] if now - t < RATE_WINDOW_SECONDS]
-    if len(window) >= RATE_LIMIT:
-        raise HTTPException(429, "too many attempts, try again shortly")
-    window.append(now)
+# RFC-ish email pattern - rejects addresses without a proper local@domain.tld structure
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
 class SignupRequest(BaseModel):
     email: str
     password: str
     display_name: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not _EMAIL_RE.match(v):
+            raise ValueError("invalid email address")
+        return v.lower()  # normalize to case-insensitive lookup
 
 
 class LoginRequest(BaseModel):
@@ -130,10 +124,11 @@ def current_user(
     return user
 
 
-@router.post("/auth/signup", response_model=Me, dependencies=[Depends(rate_limit)])
+@router.post("/auth/signup", response_model=Me, dependencies=[Depends(rate_limit_auth)])
 def signup(req: SignupRequest, response: Response, db: Session = Depends(get_db)):
-    if "@" not in req.email or len(req.password) < 8:
-        raise HTTPException(400, "invalid email or password too short")
+    # Email is already validated and lowercased by the Pydantic field_validator above
+    if len(req.password) < 8:
+        raise HTTPException(400, "password too short")
     user = User(
         email=req.email,
         password_hash=hasher.hash(req.password),
@@ -151,7 +146,7 @@ def signup(req: SignupRequest, response: Response, db: Session = Depends(get_db)
     return _me(user)
 
 
-@router.post("/auth/login", response_model=Me, dependencies=[Depends(rate_limit)])
+@router.post("/auth/login", response_model=Me, dependencies=[Depends(rate_limit_auth)])
 def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.execute(
         select(User).where(User.email == req.email)

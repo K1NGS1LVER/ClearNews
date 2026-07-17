@@ -16,7 +16,8 @@ from app.db import SessionLocal
 from pipeline.gdelt import download_gkg, parse_gkg
 from pipeline.ingest import load_records
 
-URL_TEMPLATE = "http://data.gdeltproject.org/gdeltv2/{ts}.gkg.csv.zip"
+# HTTPS to prevent MITM data tampering on the public GDELT archive
+URL_TEMPLATE = "https://data.gdeltproject.org/gdeltv2/{ts}.gkg.csv.zip"
 
 
 def sample_timestamps(days: int, files_per_day: int) -> list[str]:

@@ -17,7 +17,8 @@ import httpx
 
 from pipeline.country_codes import fips_to_iso2
 
-LASTUPDATE_URL = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+# HTTPS to prevent MITM data tampering on the public GDELT feed
+LASTUPDATE_URL = "https://data.gdeltproject.org/gdeltv2/lastupdate.txt"
 
 # GKG 2.1 tab-separated column indices
 _COL_DATE = 1
