@@ -26,12 +26,11 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(autouse=True)
-def _reset_auth_rate_limit():
-    """auth.py's signup/login rate limiter is a plain in-process dict keyed
-    by client IP, so it persists across the whole pytest session - many test
-    files each doing a couple of signups/logins can otherwise trip each
-    other's window well before hitting any real limit. Reset it per test."""
-    from app.auth import _attempts
+def _reset_rate_limits():
+    """ratelimit.py's in-process buckets persist across the whole pytest
+    session - many test files each doing a couple of requests can otherwise
+    trip each other's window well before hitting any real limit. Reset per test."""
+    from app.ratelimit import _buckets
 
-    _attempts.clear()
-    yield
+    _buckets.clear()
+    yield  # test runs here with a clean rate-limit state
