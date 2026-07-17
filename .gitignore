@@ -29,3 +29,9 @@ backend/pipeline/data/
 CLAUDE.md
 .claude/
 .superpowers/
+.opencode/
+
+# Dev-only docs and assets - internal planning files, not for distribution
+docs/DEMO.md
+docs/DESIGN-INSPIRATION.md
+docs/screenshots/
