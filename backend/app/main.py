@@ -27,6 +27,7 @@ from app.models import (
     Article, ChatMessage as StoredChatMessage, ChatSession, Outlet, Story,
     StoryDailyMetric, StoryFeedback, User,
 )
+from app.ratelimit import rate_limit_chat, rate_limit_suggest, rate_limit_summarise  # protect LLM endpoints from quota abuse
 from app.retrieval import hybrid_search
 
 @asynccontextmanager
@@ -112,7 +113,7 @@ class ArticleOut(BaseModel):
 
 class ForecastDay(BaseModel):
     day: date
-    predicted_count: float
+    predicted_count: int  # integer: you cannot publish a fraction of an article
 
 
 class StoryArc(BaseModel):
@@ -971,7 +972,7 @@ def delete_chat_session(session_id: int, user: User = Depends(current_user), db:
     return {"ok": True}
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Depends(rate_limit_chat)])  # 20 req/min - protects Groq API quota
 async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     from agent.chat import stream_chat
 
@@ -1022,7 +1023,7 @@ async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session
     return StreamingResponse(sse(), media_type="text/event-stream")
 
 
-@app.get("/api/suggest")
+@app.get("/api/suggest", dependencies=[Depends(rate_limit_suggest)])  # 10 req/min
 def suggest(story_id: int | None = None, context: str = "", db: Session = Depends(get_db)):
     from agent.chat import suggest_questions
 
@@ -1035,7 +1036,7 @@ def suggest(story_id: int | None = None, context: str = "", db: Session = Depend
     return {"questions": suggest_questions(context) if context else []}
 
 
-@app.post("/api/summarise/{story_id}")
+@app.post("/api/summarise/{story_id}", dependencies=[Depends(rate_limit_summarise)])  # 5 req/min - most expensive call
 async def summarise(story_id: int, db: Session = Depends(get_db)):
     from agent.chat import stream_chat
 

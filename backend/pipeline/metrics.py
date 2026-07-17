@@ -102,21 +102,22 @@ def compute_story_metrics(session: Session, story: Story) -> None:
         )
 
 
-def forecast_volume(counts: list[int], horizon: int = 3) -> list[float]:
+def forecast_volume(counts: list[int], horizon: int = 3) -> list[int]:
     """Project daily article counts `horizon` days ahead.
 
     Log-linear trend fit over the last week of counts - news volume decays
     (or grows) roughly exponentially, so a line in log space is the honest
-    minimal model. Needs 2+ days; clips at zero.
+    minimal model. Needs 2+ days; clips at zero. Returns integers because
+    you cannot publish a fraction of an article.
     """
     if len(counts) < 2:
         return []
-    recent = counts[-7:]
+    recent = counts[-7:]  # cap at one week to avoid stale trends dominating
     x = np.arange(len(recent))
-    slope, intercept = np.polyfit(x, np.log1p(recent), 1)
+    slope, intercept = np.polyfit(x, np.log1p(recent), 1)  # log-linear fit
     future = np.arange(len(recent), len(recent) + horizon)
-    predicted = np.expm1(slope * future + intercept)
-    return [float(max(0.0, p)) for p in predicted]
+    predicted = np.expm1(slope * future + intercept)  # back to linear space
+    return [max(0, int(round(p))) for p in predicted]  # round to whole articles, floor at zero
 
 
 def update_story_status(story: Story, now: datetime) -> None:

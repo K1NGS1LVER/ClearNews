@@ -75,11 +75,13 @@ export default function Story() {
 
   if (!arc) return <Loading />;
 
+  // Merge real daily counts with integer forecast predictions for the volume chart.
+  // predicted_count is int - you cannot publish a fraction of an article.
   const volumeData = [
     ...arc.metrics.map((m) => ({ day: m.day, article_count: m.article_count })),
     ...arc.forecast.map((f) => ({
       day: f.day,
-      predicted_count: Math.round(f.predicted_count * 10) / 10,
+      predicted_count: f.predicted_count,
     })),
   ];
 
