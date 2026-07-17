@@ -2,3 +2,9 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+# Dev-only artifacts that bloat the Docker image and are never needed at runtime
+e2e/
+*.md
+.superpowers/
+.claude/
+.opencode/

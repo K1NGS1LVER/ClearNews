@@ -12,16 +12,27 @@ x-backend-image: &backend-image
   depends_on:
     db:
       condition: service_healthy
+  # Healthcheck shared by backend, scheduler, and any future services that
+  # depend on the API being reachable. The /docs endpoint is lightweight and
+  # guaranteed to exist on every FastAPI instance.
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+    interval: 30s
+    timeout: 5s
+    start_period: 60s  # give torch/spaCy models time to load on first boot
+    retries: 5
 
 services:
   db:
     image: pgvector/pgvector:pg17
+    # Override POSTGRES_PASSWORD via .env or environment for real deployments.
     environment:
       POSTGRES_DB: clearnews
       POSTGRES_USER: clearnews
-      POSTGRES_PASSWORD: clearnews
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clearnews}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Remove this port mapping in production - it exposes the DB to the host.
     ports:
       - "5432:5432"
     healthcheck:
@@ -65,8 +76,11 @@ services:
     build: ./frontend
     ports:
       - "5173:80"
+    # Wait for backend healthcheck before starting nginx - prevents serving
+    # stale error pages while the API is still booting.
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
