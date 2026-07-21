@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { decodeEntities } from "../api";
+import { createSpeechQueue, extractCompleteSentences, type SpeechQueue } from "../lib/tts";
 import { startVad, VAD_SAMPLE_RATE, type VadSession } from "../lib/vad";
 import { pcmToWavFile } from "../lib/wav";
 import { withErrorBoundary } from "./ErrorBoundary";
@@ -90,11 +91,23 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   // instead of being stored in vadRef/surfaced in the UI.
   const voiceGenRef = useRef({});
 
+  // Spoken playback for voice-originated turns only (see send()'s `opts.speak`
+  // and handleSpeechEnd below). One AudioContext is reused across the whole
+  // panel's lifetime rather than per-turn - it must first be created/resumed
+  // synchronously inside a user-gesture handler (startVoice(), called
+  // directly from the mic button's onClick) to satisfy the browser's
+  // autoplay policy; creating it later inside the async SSE loop risks
+  // landing in a permanently `suspended` context.
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const speechQueueRef = useRef<SpeechQueue | null>(null);
+
   // Release the mic if the panel unmounts (e.g. navigation) mid-recording.
   useEffect(() => {
     return () => {
       voiceGenRef.current = {};
       vadRef.current?.stop();
+      speechQueueRef.current?.stop();
+      void audioContextRef.current?.close();
     };
   }, []);
 
@@ -111,12 +124,19 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  async function send(text: string) {
+  async function send(text: string, opts?: { speak?: boolean }) {
     if (!text.trim() || busy) return;
     const history = [...messages, { role: "user" as const, content: text }];
     setMessages([...history, { role: "assistant", content: "" }]);
     setInput("");
     setBusy(true);
+
+    // A new turn's audio must never overlap whatever a previous turn left
+    // playing/queued, voice-originated or not (e.g. a typed follow-up sent
+    // while the last voice answer is still being read out).
+    speechQueueRef.current?.stop();
+    speechQueueRef.current =
+      opts?.speak && audioContextRef.current ? createSpeechQueue(audioContextRef.current) : null;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -148,6 +168,9 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
+      // How much of `answer` has already been handed to the speech queue as
+      // complete sentences (voice-originated turns only - see below).
+      let spokenUpTo = 0;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -164,6 +187,11 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
               ...ms.slice(0, -1),
               { role: "assistant", content: answer },
             ]);
+            if (speechQueueRef.current) {
+              const { sentences, rest } = extractCompleteSentences(answer.slice(spokenUpTo));
+              for (const sentence of sentences) speechQueueRef.current.enqueue(sentence);
+              spokenUpTo = answer.length - rest.length;
+            }
           } else if (data.type === "error") {
             answer = answer ? `${answer}\n\n${data.message}` : data.message;
             setMessages((ms) => [
@@ -177,6 +205,13 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             ]);
           }
         }
+      }
+      // The stream is done; whatever's left never hit terminal punctuation
+      // followed by whitespace (the model occasionally trails off without
+      // one) - flush it as one final sentence rather than dropping it.
+      if (speechQueueRef.current) {
+        const rest = answer.slice(spokenUpTo).trim();
+        if (rest) speechQueueRef.current.enqueue(rest);
       }
       fetch(`/api/suggest?context=${encodeURIComponent(answer.slice(0, 1500))}`)
         .then((r) => r.json())
@@ -202,6 +237,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
 
   function stop() {
     abortRef.current?.abort();
+    speechQueueRef.current?.stop();
   }
 
   /** Arm the mic + VAD. Mirrors send()'s guard: don't start while an
@@ -210,6 +246,19 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     if (busy || voiceState !== "idle") return;
     setVoiceError(null);
     setVoiceState("listening");
+
+    // Must happen synchronously here, in the mic button's click handler,
+    // rather than later inside send()'s async SSE loop: browsers only allow
+    // an AudioContext to start producing sound if it was created/resumed
+    // within a user-gesture call stack. This is that gesture for the whole
+    // voice turn about to start (recording -> transcribing -> spoken reply).
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      void audioContextRef.current.resume();
+    }
+
     const gen = voiceGenRef.current;
     try {
       const session = await startVad(handleSpeechEnd);
@@ -275,7 +324,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
       setVoiceState("idle");
       if (transcript) {
-        send(transcript);
+        send(transcript, { speak: true });
       } else {
         setVoiceError("Didn't catch anything - try again.");
       }
