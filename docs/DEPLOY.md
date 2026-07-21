@@ -39,4 +39,6 @@ To backfill history immediately instead of waiting: run `uv run python -m pipeli
 
 - The Groq free tier has per-model token/rate limits (see the LangGraph agent config); heavy chat use can hit them.
 - SSE chat streaming through Vercel's rewrite proxy hasn't been verified in production - if tokens arrive batched instead of streamed, it's worth checking Vercel's proxy buffering behavior for `text/event-stream` responses.
+- Voice (STT via faster-whisper/distil-whisper, TTS via Kokoro-82M) runs in-process in `clearnews-api`, alongside the existing torch/sentence-transformers/spacy stack. That's likely to push memory usage past a free/starter Render plan - check the Render dashboard's memory graph after first deploying this feature and bump the plan if it's tight.
+- `/api/voice/speak`'s chunked audio response goes through the same Vercel rewrite proxy as SSE chat (see above) and has the same unverified-buffering risk - check on first deploy whether sentence audio starts playing incrementally or waits for the whole response to land.
 - This was build-tested with Docker/Compose locally, not actually deployed to these three services - expect to debug real account-specific quirks (Supabase pooler modes, Render cold starts) on the first pass.

@@ -317,6 +317,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       if (!resp.ok) {
         if (resp.status === 401) throw new Error("Please log in to use voice input.");
         if (resp.status === 413) throw new Error("Recording too long - try a shorter clip.");
+        if (resp.status === 429) throw new Error("Too many voice requests - wait a moment and try again.");
         if (resp.status === 503) throw new Error("Voice transcription is unavailable right now.");
         throw new Error(`transcribe failed: ${resp.status}`);
       }
@@ -485,6 +486,20 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             )}
             {voiceState === "idle" && "Mic"}
           </button>
+          {/* Screen-reader-only announcement of voice state transitions. The
+              button's visible "● REC"/spinner/"Mic" content and its aria-label
+              both change with voiceState, but neither reliably triggers an
+              announcement on its own (aria-label changes on an
+              already-focused element aren't consistently spoken, and the
+              spinner has no accessible text at all) - this live region makes
+              the transition itself audible independent of focus. */}
+          <span role="status" aria-live="polite" className="sr-only">
+            {voiceState === "listening"
+              ? "Listening for your question."
+              : voiceState === "transcribing"
+                ? "Transcribing your question."
+                : ""}
+          </span>
           <button
             type={busy ? "button" : "submit"}
             onClick={busy ? stop : undefined}
@@ -496,7 +511,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
           </button>
         </form>
         {voiceError && (
-          <p className="text-xs" style={{ color: "var(--bias-right)" }}>
+          <p role="status" aria-live="polite" className="text-xs" style={{ color: "var(--bias-right)" }}>
             {voiceError}
           </p>
         )}

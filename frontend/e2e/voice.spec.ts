@@ -226,6 +226,63 @@ test.describe("Voice input", () => {
     await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
   });
 
+  test("a rate-limited transcription (429) shows a specific message distinct from the generic fallback", async ({ page }) => {
+    await page.route("**/api/voice/transcribe", (route) =>
+      route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ detail: "too many requests, try again shortly" }) }),
+    );
+
+    await page.goto("/chat");
+    const micBtn = page.getByRole("button", { name: "Record a voice question" });
+    await micBtn.click();
+    await page.waitForFunction(() => Boolean((window as unknown as { __voiceTest?: unknown }).__voiceTest));
+    await fireSpeechEnd(page);
+
+    await expect(page.locator("text=Too many voice requests - wait a moment and try again.")).toBeVisible();
+    // Not the generic fallback that any other unhandled status code falls through to.
+    await expect(page.locator("text=transcribe failed: 429")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
+  });
+
+  test("the voice error message is exposed as a polite live region for screen readers", async ({ page }) => {
+    await page.route("**/api/voice/transcribe", (route) =>
+      route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "unavailable" }) }),
+    );
+
+    await page.goto("/chat");
+    const micBtn = page.getByRole("button", { name: "Record a voice question" });
+    await micBtn.click();
+    await page.waitForFunction(() => Boolean((window as unknown as { __voiceTest?: unknown }).__voiceTest));
+    await fireSpeechEnd(page);
+
+    const errorStatus = page.locator("text=Voice transcription is unavailable right now.");
+    await expect(errorStatus).toBeVisible();
+    await expect(errorStatus).toHaveAttribute("aria-live", "polite");
+    await expect(errorStatus).toHaveAttribute("role", "status");
+  });
+
+  test("voice state transitions are announced via a hidden live region", async ({ page }) => {
+    await page.route("**/api/voice/transcribe", async (route) => {
+      await new Promise((r) => setTimeout(r, 200));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "" }) });
+    });
+
+    await page.goto("/chat");
+    const statusRegion = page.locator('span[role="status"]').first();
+    await expect(statusRegion).toHaveAttribute("aria-live", "polite");
+    await expect(statusRegion).toHaveText("");
+
+    const micBtn = page.getByRole("button", { name: "Record a voice question" });
+    await micBtn.click();
+    await expect(statusRegion).toHaveText("Listening for your question.");
+
+    await page.waitForFunction(() => Boolean((window as unknown as { __voiceTest?: unknown }).__voiceTest));
+    await fireSpeechEnd(page);
+    await expect(statusRegion).toHaveText("Transcribing your question.");
+
+    await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible({ timeout: 10_000 });
+    await expect(statusRegion).toHaveText("");
+  });
+
   test("mic button is disabled while an answer is streaming", async ({ page }) => {
     await page.route("**/api/chat/sessions", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 1 }) }),
