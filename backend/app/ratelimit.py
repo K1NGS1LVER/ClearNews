@@ -4,12 +4,17 @@ Good enough for single-instance deployments. A multi-worker/replica setup
 would need a shared store (e.g. Redis) instead.
 """
 
+import itertools
 import time
 from collections import defaultdict
 
 from fastapi import HTTPException, Request
 
-_buckets: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+# Keyed by (limiter_id, client IP) so each _make_limiter() call gets its own
+# independent bucket per IP - see _make_limiter's docstring.
+_buckets: dict[tuple[int, str], list[float]] = defaultdict(list)
+
+_limiter_ids = itertools.count()
 
 
 def _make_limiter(limit: int, window: int):
@@ -17,15 +22,17 @@ def _make_limiter(limit: int, window: int):
     seconds, keyed by client IP. Each endpoint gets its own independent bucket
     so a burst of chat requests doesn't consume the auth rate limit."""
 
+    limiter_id = next(_limiter_ids)
+
     def _check(request: Request) -> None:
         ip = request.client.host if request.client else "unknown"
         now = time.monotonic()
-        bucket = _buckets[ip]
+        bucket = _buckets[(limiter_id, ip)]
         # Drop timestamps older than the window to implement fixed-window sliding
-        bucket["ts"] = [t for t in bucket["ts"] if now - t < window]
-        if len(bucket["ts"]) >= limit:
+        bucket[:] = [t for t in bucket if now - t < window]
+        if len(bucket) >= limit:
             raise HTTPException(429, "too many requests, try again shortly")
-        bucket["ts"].append(now)
+        bucket.append(now)
 
     return _check
 

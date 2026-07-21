@@ -205,17 +205,12 @@ def test_transcribe_endpoint_returns_503_when_model_unavailable(monkeypatch):
 
 
 def test_transcribe_endpoint_rate_limited_after_configured_requests(monkeypatch):
-    from app.ratelimit import _buckets
-
     monkeypatch.setattr(voice_mod, "transcribe", lambda path: {"transcript": "ok"})
     c, email = _authed_client()
     try:
-        # ratelimit.py's fixed-window bucket is keyed by IP only (not by
-        # which limiter is checking it - see concern in task-1-report.md),
-        # so the signup call above shares this client's bucket. Clear it so
-        # this test measures rate_limit_voice_transcribe's own 20/min window,
-        # not window state left over from authenticating.
-        _buckets.clear()
+        # rate_limit_voice_transcribe has its own independent bucket, so the
+        # signup call above (which goes through rate_limit_auth) doesn't
+        # count against this endpoint's 20/min window.
         statuses = [
             c.post(
                 "/api/voice/transcribe",
