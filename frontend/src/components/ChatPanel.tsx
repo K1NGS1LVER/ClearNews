@@ -78,10 +78,24 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const vadRef = useRef<VadSession | null>(null);
   const transcribeAbortRef = useRef<AbortController | null>(null);
+  // Replaced with a fresh object by cancelVoice() and the unmount cleanup
+  // below - a plain write, deliberately not a `.current++` read-then-write,
+  // so a linter checking for stale ref reads in effect cleanups doesn't
+  // flag it (this ref is a persistent, manually-managed generation token,
+  // not a DOM node ref). startVoice() snapshots the current token before
+  // awaiting startVad() (mic permission + asset load - can take a while)
+  // and compares it by reference after; a mismatch means the user
+  // cancelled or the component unmounted while that promise was in
+  // flight, so the just-created session must be stopped immediately
+  // instead of being stored in vadRef/surfaced in the UI.
+  const voiceGenRef = useRef({});
 
   // Release the mic if the panel unmounts (e.g. navigation) mid-recording.
   useEffect(() => {
-    return () => vadRef.current?.stop();
+    return () => {
+      voiceGenRef.current = {};
+      vadRef.current?.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -196,9 +210,21 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     if (busy || voiceState !== "idle") return;
     setVoiceError(null);
     setVoiceState("listening");
+    const gen = voiceGenRef.current;
     try {
-      vadRef.current = await startVad(handleSpeechEnd);
+      const session = await startVad(handleSpeechEnd);
+      if (voiceGenRef.current !== gen) {
+        // Cancelled or unmounted while startVad()'s mic-permission/asset
+        // load was still pending - a live session just landed after the
+        // fact. Stop it immediately rather than arming a mic the UI no
+        // longer shows as listening, and leave voiceState/vadRef alone
+        // since the cancel/unmount path already reset them.
+        session.stop();
+        return;
+      }
+      vadRef.current = session;
     } catch (err) {
+      if (voiceGenRef.current !== gen) return; // same race, on the rejection path
       vadRef.current = null;
       setVoiceState("idle");
       setVoiceError(
@@ -213,6 +239,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       lifetime - both an accessibility requirement and a fallback for VAD
       misfires or a mid-recording change of mind. */
   function cancelVoice() {
+    voiceGenRef.current = {};
     vadRef.current?.stop();
     vadRef.current = null;
     transcribeAbortRef.current?.abort();

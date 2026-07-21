@@ -12,6 +12,13 @@ import { test, expect, type Page } from "@playwright/test";
 const FAKE_VAD_MODULE = `
   export const VAD_SAMPLE_RATE = 16000;
   export async function startVad(speechEnd, speechStart) {
+    // Stands in for the real mic-permission prompt / VAD asset load, which
+    // can take a real amount of time - tests that need to observe
+    // ChatPanel's behavior while this is still pending arm the gate via
+    // armVoiceStartGate() before clicking the mic button.
+    if (window.__voiceStartGate) {
+      await window.__voiceStartGate;
+    }
     window.__voiceTest = {
       // Fire-and-forget on purpose: page.evaluate() awaits whatever this
       // returns, so returning speechEnd()'s promise (ChatPanel's async
@@ -47,6 +54,29 @@ async function stubVoiceInput(page: Page) {
 
 function fireSpeechEnd(page: Page) {
   return page.evaluate(() => (window as unknown as { __voiceTest?: { fireSpeechEnd: () => void } }).__voiceTest?.fireSpeechEnd());
+}
+
+// Installs a gate that FAKE_VAD_MODULE's startVad() awaits before doing
+// anything else, so a test can click the mic button (which resolves
+// synchronously up to that await, per ChatPanel's startVoice()) and then
+// act - e.g. cancel - while the mic-permission/asset-load promise is still
+// pending, before calling releaseVoiceStart() to let it resolve.
+function armVoiceStartGate(page: Page) {
+  return page.evaluate(() => {
+    let release: () => void = () => {};
+    (window as unknown as { __voiceStartGate: Promise<void> }).__voiceStartGate = new Promise<void>((r) => {
+      release = r;
+    });
+    (window as unknown as { __releaseVoiceStart: () => void }).__releaseVoiceStart = () => release();
+  });
+}
+
+function releaseVoiceStart(page: Page) {
+  return page.evaluate(() => (window as unknown as { __releaseVoiceStart?: () => void }).__releaseVoiceStart?.());
+}
+
+function voiceTestActive(page: Page) {
+  return page.evaluate(() => Boolean((window as unknown as { __voiceTest?: unknown }).__voiceTest));
 }
 
 test.describe("Voice input", () => {
@@ -119,6 +149,48 @@ test.describe("Voice input", () => {
 
     await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
     expect(transcribeCalled).toBe(false);
+  });
+
+  test("cancelling while the mic permission/asset load is still pending stops the session once it resolves instead of leaving the mic armed", async ({ page }) => {
+    // Regression test for a race: startVoice() flips voiceState to
+    // "listening" synchronously, then awaits startVad() - which can take a
+    // real amount of time (mic permission prompt, VAD asset load). If the
+    // user cancels while that's still in flight, vadRef.current is still
+    // null so the old code's cancelVoice() had nothing to stop, and the
+    // session that later lands from the resolved startVad() promise was
+    // stored unconditionally - arming a hot mic the UI showed as idle.
+    let transcribeCalled = false;
+    await page.route("**/api/voice/transcribe", (route) => {
+      transcribeCalled = true;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "nope" }) });
+    });
+
+    await page.goto("/chat");
+    await armVoiceStartGate(page);
+
+    const micBtn = page.getByRole("button", { name: "Record a voice question" });
+    await micBtn.click();
+
+    // idle -> listening happens before startVad()'s gated promise resolves.
+    await expect(page.getByRole("button", { name: "Stop recording" })).toBeVisible();
+
+    // Cancel now, while the gate is still closed - vadRef.current is null
+    // at this point.
+    await page.getByRole("button", { name: "Stop recording" }).click();
+    await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
+
+    // Let startVad() resolve. The fix must stop the just-created session
+    // immediately rather than storing it in vadRef / arming the mic.
+    await releaseVoiceStart(page);
+    await expect.poll(() => voiceTestActive(page)).toBe(false);
+
+    // UI must still read idle, and firing speech-end on whatever session
+    // came back must not reach transcribe/send.
+    await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
+    await fireSpeechEnd(page);
+    await page.waitForTimeout(100);
+    expect(transcribeCalled).toBe(false);
+    await expect(page.getByRole("button", { name: "Record a voice question" })).toBeVisible();
   });
 
   test("cancel during transcribing returns to idle without waiting for the response", async ({ page }) => {
