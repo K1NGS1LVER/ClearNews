@@ -22,6 +22,10 @@ frontend/test-results/
 backend/data/
 backend/pipeline/data/
 
+# Valkey runtime
+appendonlydir/
+dump.rdb
+
 # mac os ds store
 .DS_Store
 
