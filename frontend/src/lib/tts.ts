@@ -85,25 +85,35 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
       const raw = await audioPromise;
       if (stopped || raw === null || raw.byteLength === 0) return prevEndTime;
 
-      const samples = new Float32Array(raw);
-      const buffer = audioContext.createBuffer(1, samples.length, TTS_SAMPLE_RATE);
-      buffer.copyToChannel(samples, 0);
+      try {
+        const samples = new Float32Array(raw);
+        const buffer = audioContext.createBuffer(1, samples.length, TTS_SAMPLE_RATE);
+        buffer.copyToChannel(samples, 0);
 
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContext.destination);
-      source.onended = () => {
-        const i = activeSources.indexOf(source);
-        if (i !== -1) activeSources.splice(i, 1);
-      };
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.onended = () => {
+          const i = activeSources.indexOf(source);
+          if (i !== -1) activeSources.splice(i, 1);
+        };
 
-      // Re-check after the await above - stop() may have landed while this
-      // sentence's fetch was in flight.
-      if (stopped) return prevEndTime;
-      const startTime = Math.max(audioContext.currentTime, prevEndTime);
-      source.start(startTime);
-      activeSources.push(source);
-      return startTime + buffer.duration;
+        // Re-check after the await above - stop() may have landed while this
+        // sentence's fetch was in flight.
+        if (stopped) return prevEndTime;
+        const startTime = Math.max(audioContext.currentTime, prevEndTime);
+        source.start(startTime);
+        activeSources.push(source);
+        return startTime + buffer.duration;
+      } catch (err) {
+        // A 200 response whose body can't be decoded as PCM (e.g. truncated
+        // or proxy-mangled, so its byte length isn't a multiple of 4) or any
+        // other Web Audio failure at this stage - skip this sentence rather
+        // than letting `schedule` reject and silently kill every subsequent
+        // sentence in this turn.
+        console.error("Failed to schedule TTS audio for a sentence; skipping it.", err);
+        return prevEndTime;
+      }
     });
   }
 

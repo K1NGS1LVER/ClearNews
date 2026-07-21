@@ -280,4 +280,42 @@ test.describe("Voice playback (TTS)", () => {
 
     await expect.poll(() => speakRequests, { timeout: 3000 }).toEqual(["First sentence.", "Second sentence."]);
   });
+
+  test("a malformed 200 /api/voice/speak response for one sentence does not prevent subsequent sentences", async ({ page }) => {
+    // Regression test: a 200 response whose body length isn't a multiple of
+    // 4 bytes makes `new Float32Array(raw)` throw a RangeError in the
+    // playback-scheduling stage (after the fetch itself already succeeded),
+    // which is a different failure point than the HTTP-500 case covered
+    // above - that one is caught by the fetch chain's .catch(), this one
+    // previously was not, and would silently kill every later sentence in
+    // the same turn.
+    const speakRequests: string[] = [];
+    await mockChatSession(page);
+    await mockTranscribe(page, "tell me two things");
+    await page.route("**/api/voice/speak", async (route) => {
+      const text = (route.request().postDataJSON() as { text: string }).text;
+      speakRequests.push(text);
+      if (text === "First sentence.") {
+        // 5 bytes: not a multiple of 4, so `new Float32Array()` on this
+        // buffer throws a RangeError once the queue tries to schedule it.
+        await route.fulfill({ status: 200, contentType: "application/octet-stream", body: Buffer.from([0, 1, 2, 3, 4]) });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/octet-stream", body: fakePcmBody() });
+      }
+    });
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'data: {"type":"token","content":"First sentence. Second sentence."}\n\ndata: {"type":"done"}\n\n',
+      }),
+    );
+
+    await page.goto("/chat");
+    await page.getByRole("button", { name: "Record a voice question" }).click();
+    await page.waitForFunction(() => Boolean((window as unknown as { __voiceTest?: unknown }).__voiceTest));
+    await fireSpeechEnd(page);
+
+    await expect.poll(() => speakRequests, { timeout: 3000 }).toEqual(["First sentence.", "Second sentence."]);
+  });
 });
