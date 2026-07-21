@@ -121,11 +121,8 @@ def nlp_queue_pop(batch_size: int = 256) -> list[int]:
     if r is None:
         return []
     try:
-        pipe = r.pipeline()
-        for _ in range(batch_size):
-            pipe.lpop(NLP_QUEUE_KEY)
-        results = pipe.execute()
-        return [int(v) for v in results if v is not None]
+        results = r.lpop(NLP_QUEUE_KEY, batch_size)
+        return [int(v) for v in results] if results else []
     except _redis.RedisError:
         return []
 

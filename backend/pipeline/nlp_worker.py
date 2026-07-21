@@ -104,20 +104,27 @@ def run(batch_size: int = BATCH_SIZE, poll_interval: float = POLL_INTERVAL) -> N
         print(f"nlp_worker: processed {n}, {remaining} remaining in queue")
 
 
-def run_once(batch_size: int = BATCH_SIZE) -> int:
-    """Pop one batch from the queue, process it, return count processed."""
+def run_once(batch_size: int = BATCH_SIZE) -> tuple[int, int]:
+    """Pop one batch from the queue, process it.
+
+    Returns (popped, processed). `processed` can be less than `popped` (even
+    zero) when popped articles are already embedded or have no text - callers
+    that want to know whether the queue is drained should check `popped`, not
+    `processed`.
+    """
     ids = nlp_queue_pop(batch_size)
     if not ids:
-        return 0
+        return 0, 0
     with SessionLocal() as session:
-        return process_ids(session, ids)
+        return len(ids), process_ids(session, ids)
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
     if args and args[0] == "--once":
         size = int(args[1]) if len(args) > 1 else BATCH_SIZE
-        print(f"done: {run_once(size)} articles enriched")
+        _, processed = run_once(size)
+        print(f"done: {processed} articles enriched")
     else:
         size = int(args[0]) if args else BATCH_SIZE
         poll = float(args[1]) if len(args) > 1 else POLL_INTERVAL

@@ -5,13 +5,15 @@ x-backend-image: &backend-image
     - ./backend/.env
   environment:
     DATABASE_URL: postgresql+psycopg://clearnews:clearnews@db:5432/clearnews
-    REDIS_URL: redis://valkey:6379/0
+    REDIS_URL: redis://:${REDIS_PASSWORD:-clearnews-dev-redis-change-me}@valkey:6379/0
     # Self-hosted default for the live-web agent tool. Override WEB_SEARCH_PROVIDER
     # plus a key only when deliberately opting into Tavily or Brave.
     WEB_SEARCH_PROVIDER: searxng
     SEARXNG_URL: http://searxng:8080
   depends_on:
     db:
+      condition: service_healthy
+    valkey:
       condition: service_healthy
   # Healthcheck shared by backend, scheduler, and any future services that
   # depend on the API being reachable. The /docs endpoint is lightweight and
@@ -26,8 +28,21 @@ x-backend-image: &backend-image
 services:
   valkey:
     image: valkey/valkey:8-alpine
+    # --requirepass: valkey has no auth by default, but this instance holds
+    # session tokens (app/cache.py's session_key) and the NLP work queue, so
+    # it needs the same treatment as db below. --appendonly: persist the NLP
+    # queue and cache across restarts instead of dropping it silently.
+    command: ["valkey-server", "--requirepass", "${REDIS_PASSWORD:-clearnews-dev-redis-change-me}", "--appendonly", "yes"]
+    volumes:
+      - valkeydata:/data
+    # Remove this port mapping in production - it exposes valkey to the host.
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "${REDIS_PASSWORD:-clearnews-dev-redis-change-me}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   db:
     image: pgvector/pgvector:pg17
@@ -75,6 +90,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
       backend:
         condition: service_healthy
 
@@ -91,3 +108,4 @@ services:
 volumes:
   pgdata:
   searxng-data:
+  valkeydata:

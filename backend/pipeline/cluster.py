@@ -17,6 +17,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.cache import delete_key, umap_key
 from app.db import SessionLocal
 from app.models import Article, Story
 
@@ -59,6 +60,7 @@ def run_clustering(session: Session, window_days: int = WINDOW_DAYS) -> dict:
 
     created = 0
     assigned = 0
+    touched_story_ids: set[int] = set()
     for label in sorted(set(labels)):
         if label == -1:
             continue
@@ -84,10 +86,18 @@ def run_clustering(session: Session, window_days: int = WINDOW_DAYS) -> dict:
             if a.story_id != story.id:
                 a.story_id = story.id
                 assigned += 1
+                touched_story_ids.add(story.id)
         story.first_seen = min(story.first_seen, min(a.published_at for a in members))
         story.last_seen = max(story.last_seen, max(a.published_at for a in members))
 
     session.commit()
+
+    # Membership changed for these stories, so their cached UMAP projection
+    # (app/main.py's story_drift) is stale - drop it rather than waiting out
+    # the 1h TTL.
+    for story_id in touched_story_ids:
+        delete_key(umap_key(story_id))
+
     return {"articles": len(articles), "stories_created": created, "assigned": assigned}
 
 

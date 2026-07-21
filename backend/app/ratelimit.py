@@ -1,13 +1,19 @@
 """Fixed-window rate limiter backed by Redis atomic counters.
 
-Works across workers/replicas. Falls back to a permissive no-op when Redis
-is unavailable so the app keeps working in dev / test without a running instance.
+Works across workers/replicas. Fails *closed* (503) when Redis is unreachable:
+these limiters guard a paid LLM quota and CPU-bound local voice inference, so
+an outage of the enforcement mechanism must not silently turn into unlimited
+access to either. This is a deliberately different posture from app.cache's
+caches (search/for-you/umap/session), which fail open because losing them
+only costs performance, not money or CPU.
 """
 
 import redis as _redis
 from fastapi import HTTPException, Request
 
 from app.cache import _client as _redis_client
+
+_UNAVAILABLE = HTTPException(503, "rate limiting temporarily unavailable, try again shortly")
 
 
 def _make_limiter(name: str, limit: int, window: int):
@@ -20,13 +26,13 @@ def _make_limiter(name: str, limit: int, window: int):
         key = f"ratelimit:{name}:{ip}"
         r = _redis_client()
         if r is None:
-            return  # fail-open
+            raise _UNAVAILABLE
         try:
             n = r.incr(key)
             if n == 1:
                 r.expire(key, window)
         except _redis.RedisError:
-            return  # fail-open on transient Redis errors
+            raise _UNAVAILABLE from None
         if n > limit:
             raise HTTPException(429, "too many requests, try again shortly")
 

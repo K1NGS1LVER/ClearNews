@@ -80,10 +80,13 @@ def load_records(
     )
     rows = result.fetchall()
     inserted = len(rows)
-    if inserted:
-        ids = [r[0] for r in rows]
-        nlp_queue_push(ids)
+    ids = [r[0] for r in rows]
     session.commit()
+    # Push to the NLP queue only after commit - a worker popping these IDs
+    # before the insert is durable would find no matching rows and silently
+    # lose that article's enrichment.
+    if ids:
+        nlp_queue_push(ids)
     return inserted
 
 

@@ -11,14 +11,13 @@ logic deterministically without a live Redis/Valkey instance.
 """
 
 import pytest
+import redis as _redis
 from fastapi import HTTPException
 
 from app.ratelimit import _make_limiter
 
-
-@pytest.fixture(autouse=True)
-def _use_fake_redis(fake_redis):
-    yield fake_redis
+# fake_redis (conftest.py) is autouse, so every test here already runs
+# against a working in-memory Redis stand-in.
 
 
 class _FakeClient:
@@ -75,3 +74,30 @@ def test_buckets_stay_independent_per_ip_within_the_same_limiter():
 
     # A different IP hitting the same limiter is unaffected.
     limiter(request_b)
+
+
+def test_fails_closed_when_redis_is_unreachable(monkeypatch):
+    """Rate limiting protects a paid LLM quota and CPU-bound voice inference,
+    so a Redis outage must reject requests (503), not silently let them
+    through - the opposite policy from app.cache's caches, which fail open."""
+    monkeypatch.setattr("app.ratelimit._redis_client", lambda: None)
+    limiter = _make_limiter("down", 10, 60)
+    request = _FakeRequest()
+
+    with pytest.raises(HTTPException) as exc_info:
+        limiter(request)
+    assert exc_info.value.status_code == 503
+
+
+def test_fails_closed_on_transient_redis_error(monkeypatch):
+    class _BrokenRedis:
+        def incr(self, key):
+            raise _redis.ConnectionError("boom")
+
+    monkeypatch.setattr("app.ratelimit._redis_client", lambda: _BrokenRedis())
+    limiter = _make_limiter("flaky", 10, 60)
+    request = _FakeRequest()
+
+    with pytest.raises(HTTPException) as exc_info:
+        limiter(request)
+    assert exc_info.value.status_code == 503

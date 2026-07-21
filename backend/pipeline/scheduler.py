@@ -21,6 +21,7 @@ from pipeline.fetch_content import run_backfill_story_images, run_fetch
 from pipeline.gdelt_doc import active_countries, poll_countries
 from pipeline.ingest import ingest_latest
 from pipeline.metrics import run_metrics
+from pipeline.nlp import process_all as nlp_process_all
 from pipeline.nlp_worker import run_once as nlp_run_once
 from pipeline.topics import run_topics
 
@@ -39,10 +40,16 @@ def hourly() -> None:
     print(poll_active_countries())
     print(run_fetch())  # full text first so NLP works on content, not titles
     print(run_backfill_story_images())  # keep filling in story thumbnails
-    # Drain the NLP queue: process all pending articles in batches
+    # Drain the NLP queue: process all pending articles in batches. Loop on
+    # `popped`, not `processed` - a batch can pop articles that are already
+    # embedded or have no text and legitimately process zero of them, which
+    # must not be mistaken for an empty queue.
     total = 0
-    while n := nlp_run_once():
-        total += n
+    while True:
+        popped, processed = nlp_run_once()
+        if not popped:
+            break
+        total += processed
         print(f"nlp_worker: processed {total} from queue")
     print(f"hourly: NLP done ({total} articles)")
     with SessionLocal() as session:
@@ -52,6 +59,12 @@ def hourly() -> None:
 
 def nightly() -> None:
     print(run_topics())
+    # Backstop reconciliation sweep: valkey persists the NLP queue to disk
+    # (see docker-compose.yml's --appendonly), but a worker crash mid-batch or
+    # a queue flush can still drop entries. This DB-driven pass over
+    # embedding IS NULL catches anything the queue-based hourly path missed.
+    # Idempotent and safe to run regardless of queue state.
+    print(f"nightly: NLP reconciliation done ({nlp_process_all()} articles)")
     # xgboost and torch cannot share a process on macOS (conflicting OpenMP
     # runtimes), so death prediction runs in its own process
     for cmd in ("train", "score"):

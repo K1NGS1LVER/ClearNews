@@ -93,6 +93,11 @@ want everything natively:
 - **Node.js 20.19+** (22 LTS recommended — matches CI and the Docker image)
   with `pnpm`.
 - **PostgreSQL 17** with the **pgvector** extension.
+- **Redis or Valkey** — required, not optional: rate limiting on the LLM and
+  voice endpoints fails *closed* (503) without it, to avoid silently exposing
+  a paid Groq quota and CPU-bound local inference to unlimited requests if the
+  store goes down. Search/for-you/session caching degrade gracefully without
+  it, but the rate-limited endpoints won't work at all.
 
 <details>
 <summary><strong>Installing uv (all platforms)</strong></summary>
@@ -181,6 +186,36 @@ createdb clearnews
 ```
 </details>
 
+<details>
+<summary><strong>Installing Redis or Valkey</strong></summary>
+
+Either works — Valkey is the open-source fork Docker Compose uses; Redis
+itself is a drop-in replacement for local dev.
+
+```bash
+# Debian / Ubuntu
+sudo apt install -y redis-server
+sudo systemctl enable --now redis-server
+
+# Fedora / RHEL / Rocky
+sudo dnf install -y redis
+sudo systemctl enable --now redis
+
+# Arch
+sudo pacman -S redis
+sudo systemctl enable --now redis
+
+# macOS
+brew install redis
+brew services start redis
+```
+
+No password needed for local dev — `backend/.env.example`'s default
+`REDIS_URL=redis://localhost:6379/0` assumes an unauthenticated local
+instance. Docker Compose's `valkey` service does set a password (see
+`docker-compose.yml`); that's only relevant if you're running the Docker path.
+</details>
+
 ## Docker
 
 The simplest way to run the whole stack — Postgres, the API, the scheduler,
@@ -208,8 +243,9 @@ docker compose run --rm backend uv run python -m pipeline.backfill 45 2
 ## Local development
 
 ```bash
-# 1. database - see the Prerequisites section above for your OS
+# 1. database + Redis/Valkey - see the Prerequisites section above for your OS
 createdb clearnews   # if you haven't already
+# (start your Redis/Valkey service if it isn't already running)
 
 # 2. backend
 cd backend
@@ -242,6 +278,7 @@ All variables live in `backend/.env` (copy from `backend/.env.example`).
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `DATABASE_URL` | yes | — | Postgres connection string |
+| `REDIS_URL` | yes | `redis://localhost:6379/0` | Redis/Valkey connection string — rate limiting fails closed (503) without it |
 | `GROQ_API_KEY` | for chat/summaries/suggestions | — | free key at [console.groq.com](https://console.groq.com) |
 | `GROQ_MODEL` | no | `openai/gpt-oss-120b` | chat agent model |
 | `SUGGEST_MODEL` | no | `llama-3.1-8b-instant` | separate small model for suggested follow-ups, so Groq's per-model free-tier rate limit doesn't starve chat |
@@ -297,6 +334,8 @@ cd backend && uv run pytest -q
 cd frontend && pnpm build && pnpm lint
 
 # frontend - end-to-end (Playwright; spins up the backend and Vite dev server for you)
+# needs a Redis/Valkey instance running locally (see Prerequisites) - rate
+# limiting fails closed, so auth/chat/voice requests 503 without one
 pnpm test
 ```
 

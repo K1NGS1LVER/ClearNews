@@ -40,9 +40,9 @@ test.describe("Auth rate limiting", () => {
   });
 });
 
-test.describe("Chat rate limiting", () => {
-  test("blocks excessive chat requests", async ({ page }) => {
-    const email = `e2e-ratelimit-chat+${Date.now()}@test.local`;
+test.describe("Suggest rate limiting", () => {
+  test("blocks excessive suggest requests", async ({ page }) => {
+    const email = `e2e-ratelimit-suggest+${Date.now()}@test.local`;
 
     // sign up
     await page.goto("/signup");
