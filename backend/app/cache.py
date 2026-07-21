@@ -20,7 +20,7 @@ _redis_instance = None
 def _client() -> _redis.Redis | None:
     global _redis_instance
     if _redis_instance is None:
-        url = os.getenv("REDIS_URL", "redis://valkey:6379/0")
+        url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         try:
             _redis_instance = _redis.from_url(url, decode_responses=True)
             _redis_instance.ping()
