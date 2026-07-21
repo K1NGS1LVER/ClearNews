@@ -1,55 +1,51 @@
-"""In-process fixed-window rate limiter.
+"""Fixed-window rate limiter backed by Redis atomic counters.
 
-Good enough for single-instance deployments. A multi-worker/replica setup
-would need a shared store (e.g. Redis) instead.
+Works across workers/replicas. Falls back to a permissive no-op when Redis
+is unavailable so the app keeps working in dev / test without a running instance.
 """
 
-import itertools
-import time
-from collections import defaultdict
-
+import redis as _redis
 from fastapi import HTTPException, Request
 
-# Keyed by (limiter_id, client IP) so each _make_limiter() call gets its own
-# independent bucket per IP - see _make_limiter's docstring.
-_buckets: dict[tuple[int, str], list[float]] = defaultdict(list)
-
-_limiter_ids = itertools.count()
+from app.cache import _client as _redis_client
 
 
-def _make_limiter(limit: int, window: int):
+def _make_limiter(name: str, limit: int, window: int):
     """Return a FastAPI dependency that enforces `limit` requests per `window`
     seconds, keyed by client IP. Each endpoint gets its own independent bucket
     so a burst of chat requests doesn't consume the auth rate limit."""
 
-    limiter_id = next(_limiter_ids)
-
     def _check(request: Request) -> None:
         ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-        bucket = _buckets[(limiter_id, ip)]
-        # Drop timestamps older than the window to implement fixed-window sliding
-        bucket[:] = [t for t in bucket if now - t < window]
-        if len(bucket) >= limit:
+        key = f"ratelimit:{name}:{ip}"
+        r = _redis_client()
+        if r is None:
+            return  # fail-open
+        try:
+            n = r.incr(key)
+            if n == 1:
+                r.expire(key, window)
+        except _redis.RedisError:
+            return  # fail-open on transient Redis errors
+        if n > limit:
             raise HTTPException(429, "too many requests, try again shortly")
-        bucket.append(now)
 
     return _check
 
 
 # Auth endpoints: 10 attempts/min/IP
-rate_limit_auth = _make_limiter(10, 60)
+rate_limit_auth = _make_limiter("auth", 10, 60)
 
 # LLM-powered endpoints: 20 chat, 10 suggest, 5 summarise per minute
-rate_limit_chat = _make_limiter(20, 60)
-rate_limit_suggest = _make_limiter(10, 60)
-rate_limit_summarise = _make_limiter(5, 60)
+rate_limit_chat = _make_limiter("chat", 20, 60)
+rate_limit_suggest = _make_limiter("suggest", 10, 60)
+rate_limit_summarise = _make_limiter("summarise", 5, 60)
 
 # Voice transcription: CPU-bound local inference, same order as chat
-rate_limit_voice_transcribe = _make_limiter(20, 60)
+rate_limit_voice_transcribe = _make_limiter("voice_transcribe", 20, 60)
 
 # Voice synthesis: higher ceiling than transcribe because one assistant
 # answer fans out into multiple /api/voice/speak calls, one per sentence of
 # the reply, so a single voice turn with a multi-sentence answer already
 # costs several calls.
-rate_limit_voice_speak = _make_limiter(60, 60)
+rate_limit_voice_speak = _make_limiter("voice_speak", 60, 60)

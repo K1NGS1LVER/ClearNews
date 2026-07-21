@@ -1,16 +1,24 @@
 """Unit tests for app.ratelimit's per-limiter bucket isolation.
 
 Regression coverage for a bug where every `_make_limiter()` closure shared
-one module-level bucket keyed only by client IP, so exhausting one endpoint's
-budget (e.g. rate_limit_auth) could also block an unrelated endpoint's
-budget (e.g. rate_limit_chat) for the same IP - contradicting the module's
-own docstring promise of independent per-endpoint buckets.
+one bucket keyed only by client IP, so exhausting one endpoint's budget
+(e.g. rate_limit_auth) could also block an unrelated endpoint's budget
+(e.g. rate_limit_chat) for the same IP - contradicting the module's own
+docstring promise of independent per-endpoint buckets. The Redis-backed
+limiter fixes this by keying counters as f"ratelimit:{name}:{ip}"; these
+tests run against the fake_redis fixture (see conftest.py) to exercise that
+logic deterministically without a live Redis/Valkey instance.
 """
 
 import pytest
 from fastapi import HTTPException
 
 from app.ratelimit import _make_limiter
+
+
+@pytest.fixture(autouse=True)
+def _use_fake_redis(fake_redis):
+    yield fake_redis
 
 
 class _FakeClient:
@@ -26,8 +34,8 @@ class _FakeRequest:
 
 
 def test_limiters_have_independent_buckets_for_the_same_ip():
-    limiter_a = _make_limiter(2, 60)
-    limiter_b = _make_limiter(2, 60)
+    limiter_a = _make_limiter("a", 2, 60)
+    limiter_b = _make_limiter("b", 2, 60)
     request = _FakeRequest()
 
     # Exhaust limiter_a's budget for this IP.
@@ -47,7 +55,7 @@ def test_limiters_have_independent_buckets_for_the_same_ip():
 
 
 def test_limiter_still_enforces_its_own_limit_and_window():
-    limiter = _make_limiter(1, 60)
+    limiter = _make_limiter("solo", 1, 60)
     request = _FakeRequest()
 
     limiter(request)
@@ -57,7 +65,7 @@ def test_limiter_still_enforces_its_own_limit_and_window():
 
 
 def test_buckets_stay_independent_per_ip_within_the_same_limiter():
-    limiter = _make_limiter(1, 60)
+    limiter = _make_limiter("shared", 1, 60)
     request_a = _FakeRequest("203.0.113.1")
     request_b = _FakeRequest("203.0.113.2")
 

@@ -229,7 +229,7 @@ def test_transcribe_endpoint_returns_422_for_undecodable_audio(monkeypatch):
         _cleanup(email)
 
 
-def test_transcribe_endpoint_rate_limited_after_configured_requests(monkeypatch):
+def test_transcribe_endpoint_rate_limited_after_configured_requests(monkeypatch, fake_redis):
     monkeypatch.setattr(voice_mod, "transcribe", lambda path: {"transcript": "ok"})
     c, email = _authed_client()
     try:
@@ -400,7 +400,7 @@ def test_speak_endpoint_returns_503_when_model_unavailable(monkeypatch):
         _cleanup(email)
 
 
-def test_speak_endpoint_rate_limited_after_configured_requests(monkeypatch):
+def test_speak_endpoint_rate_limited_after_configured_requests(monkeypatch, fake_redis):
     monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
     monkeypatch.setattr(voice_mod, "synthesize_stream", lambda text, voice: iter([b"\x00\x01"]))
     c, email = _authed_client()

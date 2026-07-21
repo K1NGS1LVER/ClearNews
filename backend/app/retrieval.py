@@ -6,11 +6,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session, defer, joinedload
 
+from app.cache import get_json, search_key, set_json
 from app.models import Article
 
 VECTOR_CANDIDATES = 30
 FTS_CANDIDATES = 30
 RRF_K = 60
+SEARCH_CACHE_TTL = 300
 
 
 def rrf_fuse(*rankings: list[int], limit: int, k: int = RRF_K) -> list[int]:
@@ -36,6 +38,9 @@ def hybrid_search(
 
     A candidate may come from either ranking, which preserves exact keyword
     recovery without throwing away semantic-only matches.
+
+    Results are cached in Redis keyed by (query, limit, story_id) for 5 minutes
+    to avoid re-encoding the query and re-running the DB search on repeat queries.
     """
     cleaned = query.strip()
     if not cleaned or limit <= 0:
@@ -43,6 +48,15 @@ def hybrid_search(
     filters = []
     if story_id is not None:
         filters.append(Article.story_id == story_id)
+
+    cache_key = search_key(cleaned, limit, story_id)
+    cached = get_json(cache_key)
+    if cached is not None:
+        rows = db.execute(
+            select(Article).options(defer(Article.search_document), joinedload(Article.outlet)).where(Article.id.in_(cached))
+        ).scalars().all()
+        by_id = {article.id: article for article in rows}
+        return [by_id[article_id] for article_id in cached if article_id in by_id]
 
     if embed is None:
         from pipeline.nlp import _embedder
@@ -65,9 +79,6 @@ def hybrid_search(
             .limit(FTS_CANDIDATES)
         ).scalars().all()
     except ProgrammingError as exc:
-        # Useful during a rolling deploy where an old worker sees the new code
-        # before Alembic has added the generated column. Normal deployments use
-        # the indexed branch above; this compatibility branch is not indexed.
         if "search_document" not in str(exc):
             raise
         db.rollback()
@@ -82,6 +93,9 @@ def hybrid_search(
         ).scalars().all()
 
     ids = rrf_fuse(vector_rows, text_rows, limit=limit)
+    if ids:
+        set_json(cache_key, ids, SEARCH_CACHE_TTL)
+
     if not ids:
         return []
     rows = db.execute(

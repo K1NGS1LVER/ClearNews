@@ -22,10 +22,10 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "uv run uvicorn app.main:app --port 8000",
+      command: "uv run uvicorn app.main:app --port 8000 --env-file .env",
       port: 8000,
       cwd: "../backend",
-      timeout: 30_000,
+      timeout: 60_000,
       reuseExistingServer: !process.env.CI,
     },
     {

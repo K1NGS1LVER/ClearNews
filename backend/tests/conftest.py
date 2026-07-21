@@ -27,10 +27,41 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
-    """ratelimit.py's in-process buckets persist across the whole pytest
-    session - many test files each doing a couple of requests can otherwise
-    trip each other's window well before hitting any real limit. Reset per test."""
-    from app.ratelimit import _buckets
+    """Clean Redis rate-limit counters between tests to avoid cross-test
+    interference. No-op when Redis is unavailable."""
+    from app.cache import _client as _redis_client
 
-    _buckets.clear()
-    yield  # test runs here with a clean rate-limit state
+    r = _redis_client()
+    if r is not None:
+        try:
+            keys = r.keys("ratelimit:*")
+            if keys:
+                r.delete(*keys)
+        except Exception:
+            pass
+    yield
+
+
+class _FakeRedis:
+    """Minimal in-memory stand-in for the redis client's incr/expire calls,
+    so rate-limit enforcement tests exercise the real counting logic in
+    app.ratelimit without needing a live Redis/Valkey instance in CI."""
+
+    def __init__(self):
+        self._counts: dict[str, int] = {}
+
+    def incr(self, key: str) -> int:
+        self._counts[key] = self._counts.get(key, 0) + 1
+        return self._counts[key]
+
+    def expire(self, key: str, seconds: int) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_redis(monkeypatch):
+    """Opt-in fixture: patches app.ratelimit's Redis client with an in-memory
+    fake so tests can assert real rate-limit enforcement deterministically."""
+    fake = _FakeRedis()
+    monkeypatch.setattr("app.ratelimit._redis_client", lambda: fake)
+    return fake

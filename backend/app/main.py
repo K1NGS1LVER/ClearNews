@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth import current_user
 from app.auth import router as auth_router
+from app.cache import delete_key, foryou_key, get_json, set_json, umap_key
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
 from app.models import (
@@ -396,6 +397,11 @@ def for_you(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    cache_key = foryou_key(user.id)
+    cached = get_json(cache_key)
+    if cached is not None:
+        return [ForYouCard(**c) for c in cached]
+
     from datetime import UTC, datetime
 
     now = datetime.now(UTC)
@@ -512,6 +518,7 @@ def for_you(
                 matched=matched,
             )
         )
+    set_json(cache_key, [c.model_dump() for c in cards], 600)
     return cards
 
 
@@ -550,6 +557,7 @@ def story_feedback(
         user.category_weights = weights
 
     db.commit()
+    delete_key(foryou_key(user.id))
     return {"ok": True}
 
 
@@ -813,6 +821,11 @@ def article_detail(article_id: int, db: Session = Depends(get_db)):
 @app.get("/api/stories/{story_id}/drift")
 def story_drift(story_id: int, db: Session = Depends(get_db)):
     """Article positions in 2D embedding space + daily centroid trajectory."""
+    ck = umap_key(story_id)
+    cached = get_json(ck)
+    if cached is not None:
+        return cached
+
     import numpy as np
 
     from pipeline.viz import daily_centroids, umap_2d
@@ -826,7 +839,7 @@ def story_drift(story_id: int, db: Session = Depends(get_db)):
 
     coords = umap_2d(np.array([a.embedding for a in articles]))
     days = [a.published_at.date() for a in articles]
-    return {
+    result = {
         "points": [
             {
                 "article_id": a.id,
@@ -841,6 +854,8 @@ def story_drift(story_id: int, db: Session = Depends(get_db)):
         ],
         "trajectory": daily_centroids(days, coords),
     }
+    set_json(ck, result, 3600)
+    return result
 
 
 @app.get("/api/outlets/map")
