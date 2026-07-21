@@ -37,6 +37,7 @@ dependencies = [
     "soundfile>=0.12",
     "phonemizer>=3.2",
     "num2words>=0.5",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

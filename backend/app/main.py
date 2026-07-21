@@ -5,19 +5,21 @@ Run: uv run uvicorn app.main:app --reload
 
 import json
 import os
+import tempfile
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import current_user
 from app.auth import router as auth_router
@@ -27,8 +29,14 @@ from app.models import (
     Article, ChatMessage as StoredChatMessage, ChatSession, Outlet, Story,
     StoryDailyMetric, StoryFeedback, User,
 )
-from app.ratelimit import rate_limit_chat, rate_limit_suggest, rate_limit_summarise  # protect LLM endpoints from quota abuse
+from app.ratelimit import (
+    rate_limit_chat, rate_limit_suggest, rate_limit_summarise, rate_limit_voice_transcribe,
+)  # protect LLM/voice endpoints from quota abuse
 from app.retrieval import hybrid_search
+
+# Several-second voice clip: generous headroom while still bounding the
+# per-request temp file / memory use.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -1021,6 +1029,40 @@ async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session
         yield "data: {\"type\": \"done\"}\n\n"
 
     return StreamingResponse(sse(), media_type="text/event-stream")
+
+
+@app.post("/api/voice/transcribe", dependencies=[Depends(rate_limit_voice_transcribe)])  # 20 req/min
+async def transcribe_voice(file: UploadFile = File(...), user: User = Depends(current_user)):
+    from app import voice
+
+    suffix = os.path.splitext(file.filename or "")[1] or ".webm"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        total = 0
+        # Stream in chunks rather than `await file.read()`, so an oversized
+        # upload is rejected without ever buffering the whole thing in memory.
+        while chunk := await file.read(1024 * 1024):
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    413, f"audio too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"
+                )
+            tmp.write(chunk)
+        tmp.close()
+        if total == 0:
+            raise HTTPException(400, "empty audio upload")
+
+        result = await run_in_threadpool(voice.transcribe, tmp.name)
+    finally:
+        tmp.close()  # no-op if already closed above
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+
+    if result is None:
+        raise HTTPException(503, "speech-to-text model unavailable")
+    return result
 
 
 @app.get("/api/suggest", dependencies=[Depends(rate_limit_suggest)])  # 10 req/min

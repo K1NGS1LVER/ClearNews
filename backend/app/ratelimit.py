@@ -37,3 +37,6 @@ rate_limit_auth = _make_limiter(10, 60)
 rate_limit_chat = _make_limiter(20, 60)
 rate_limit_suggest = _make_limiter(10, 60)
 rate_limit_summarise = _make_limiter(5, 60)
+
+# Voice transcription: CPU-bound local inference, same order as chat
+rate_limit_voice_transcribe = _make_limiter(20, 60)
