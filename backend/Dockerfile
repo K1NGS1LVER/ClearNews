@@ -17,7 +17,7 @@ RUN uv sync --frozen --no-dev
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

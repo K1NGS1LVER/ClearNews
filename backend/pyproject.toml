@@ -31,6 +31,12 @@ dependencies = [
     "argon2-cffi>=23.1",
     "shap>=0.48",
     "alembic>=1.18.5",
+    "faster-whisper>=1.1",
+    "kokoro==0.7.16",
+    "misaki==0.7.4",
+    "soundfile>=0.12",
+    "phonemizer>=3.2",
+    "num2words>=0.5",
 ]
 
 [dependency-groups]
@@ -41,9 +47,16 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not real_model'"
 markers = [
     "dev_db: needs a populated dev database with clustered stories (run the pipeline first)",
+    "real_model: downloads and runs real STT/TTS models (multi-hundred-MB, opt-in only, not run in CI)",
 ]
 
 [tool.uv.sources]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+
+[[tool.uv.dependency-metadata]]
+name = "kokoro"
+version = "0.7.16"
+requires-dist = ["huggingface-hub", "loguru", "misaki>=0.7.4", "scipy", "torch", "transformers"]
