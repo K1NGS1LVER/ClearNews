@@ -5,6 +5,7 @@ x-backend-image: &backend-image
     - ./backend/.env
   environment:
     DATABASE_URL: postgresql+psycopg://clearnews:clearnews@db:5432/clearnews
+    REDIS_URL: redis://valkey:6379/0
     # Self-hosted default for the live-web agent tool. Override WEB_SEARCH_PROVIDER
     # plus a key only when deliberately opting into Tavily or Brave.
     WEB_SEARCH_PROVIDER: searxng
@@ -23,6 +24,11 @@ x-backend-image: &backend-image
     retries: 5
 
 services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+
   db:
     image: pgvector/pgvector:pg17
     # Override POSTGRES_PASSWORD via .env or environment for real deployments.

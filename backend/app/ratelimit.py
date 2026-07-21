@@ -1,39 +1,45 @@
-"""In-process fixed-window rate limiter.
+"""Fixed-window rate limiter backed by Redis atomic counters.
 
-Good enough for single-instance deployments. A multi-worker/replica setup
-would need a shared store (e.g. Redis) instead.
+Works across workers/replicas. Falls back to a permissive no-op when Redis
+is unavailable so the app keeps working in dev / test without a running instance.
 """
 
 import time
-from collections import defaultdict
 
 from fastapi import HTTPException, Request
 
-_buckets: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+from app.cache import _client as _redis_client
+
+_BLACKHOLE: dict[str, float] = {}  # sentinel bucket used when Redis is down
 
 
-def _make_limiter(limit: int, window: int):
+def _make_limiter(name: str, limit: int, window: int):
     """Return a FastAPI dependency that enforces `limit` requests per `window`
     seconds, keyed by client IP. Each endpoint gets its own independent bucket
     so a burst of chat requests doesn't consume the auth rate limit."""
 
     def _check(request: Request) -> None:
         ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-        bucket = _buckets[ip]
-        # Drop timestamps older than the window to implement fixed-window sliding
-        bucket["ts"] = [t for t in bucket["ts"] if now - t < window]
-        if len(bucket["ts"]) >= limit:
-            raise HTTPException(429, "too many requests, try again shortly")
-        bucket["ts"].append(now)
+        key = f"ratelimit:{name}:{ip}"
+        r = _redis_client()
+        if r is None:
+            return  # fail-open
+        try:
+            n = r.incr(key)
+            if n == 1:
+                r.expire(key, window)
+            if n > limit:
+                raise HTTPException(429, "too many requests, try again shortly")
+        except Exception:
+            return  # fail-open on transient Redis errors
 
     return _check
 
 
 # Auth endpoints: 10 attempts/min/IP
-rate_limit_auth = _make_limiter(10, 60)
+rate_limit_auth = _make_limiter("auth", 10, 60)
 
 # LLM-powered endpoints: 20 chat, 10 suggest, 5 summarise per minute
-rate_limit_chat = _make_limiter(20, 60)
-rate_limit_suggest = _make_limiter(10, 60)
-rate_limit_summarise = _make_limiter(5, 60)
+rate_limit_chat = _make_limiter("chat", 20, 60)
+rate_limit_suggest = _make_limiter("suggest", 10, 60)
+rate_limit_summarise = _make_limiter("summarise", 5, 60)

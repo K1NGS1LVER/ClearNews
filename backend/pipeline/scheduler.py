@@ -21,7 +21,7 @@ from pipeline.fetch_content import run_backfill_story_images, run_fetch
 from pipeline.gdelt_doc import active_countries, poll_countries
 from pipeline.ingest import ingest_latest
 from pipeline.metrics import run_metrics
-from pipeline.nlp import process_all
+from pipeline.nlp_worker import run_once as nlp_run_once
 from pipeline.topics import run_topics
 
 
@@ -39,7 +39,12 @@ def hourly() -> None:
     print(poll_active_countries())
     print(run_fetch())  # full text first so NLP works on content, not titles
     print(run_backfill_story_images())  # keep filling in story thumbnails
-    process_all()
+    # Drain the NLP queue: process all pending articles in batches
+    total = 0
+    while n := nlp_run_once():
+        total += n
+        print(f"nlp_worker: processed {total} from queue")
+    print(f"hourly: NLP done ({total} articles)")
     with SessionLocal() as session:
         print(run_clustering(session))
     print(run_metrics())

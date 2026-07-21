@@ -27,10 +27,16 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
-    """ratelimit.py's in-process buckets persist across the whole pytest
-    session - many test files each doing a couple of requests can otherwise
-    trip each other's window well before hitting any real limit. Reset per test."""
-    from app.ratelimit import _buckets
+    """Clean Redis rate-limit counters between tests to avoid cross-test
+    interference. No-op when Redis is unavailable."""
+    from app.cache import _client as _redis_client
 
-    _buckets.clear()
-    yield  # test runs here with a clean rate-limit state
+    r = _redis_client()
+    if r is not None:
+        try:
+            keys = r.keys("ratelimit:*")
+            if keys:
+                r.delete(*keys)
+        except Exception:
+            pass
+    yield

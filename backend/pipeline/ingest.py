@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.cache import nlp_queue_push
 from app.db import SessionLocal
 from app.models import Article, Outlet
 from pipeline.gdelt import GkgRecord, download_gkg, fetch_latest_gkg_url, parse_gkg
@@ -77,7 +78,11 @@ def load_records(
         .on_conflict_do_nothing(index_elements=["url"])
         .returning(Article.id)
     )
-    inserted = len(result.fetchall())
+    rows = result.fetchall()
+    inserted = len(rows)
+    if inserted:
+        ids = [r[0] for r in rows]
+        nlp_queue_push(ids)
     session.commit()
     return inserted
 

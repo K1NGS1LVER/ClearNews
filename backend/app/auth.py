@@ -13,6 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.cache import (
+    delete_key,
+    delete_session,
+    foryou_key,
+    get_session_user_id,
+    set_session,
+)
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
 from app.models import User, UserSession
@@ -91,6 +98,7 @@ def _create_session(db: Session, user: User) -> str:
         )
     )
     db.commit()
+    set_session(token, user.id, SESSION_MAX_AGE)
     return token
 
 
@@ -113,6 +121,15 @@ def current_user(
 ) -> User:
     if not session:
         raise HTTPException(401, "not authenticated")
+
+    # Fast path: check Redis cache first
+    user_id = get_session_user_id(session)
+    if user_id is not None:
+        user = db.get(User, user_id)
+        if user:
+            return user
+
+    # Slow path: fall back to PostgreSQL
     row = db.execute(
         select(UserSession).where(UserSession.token == session)
     ).scalar_one_or_none()
@@ -121,6 +138,9 @@ def current_user(
     user = db.get(User, row.user_id)
     if not user:
         raise HTTPException(401, "not authenticated")
+
+    # Populate Redis cache so next request uses the fast path
+    set_session(session, user.id, int((row.expires_at - datetime.now(UTC)).total_seconds()))
     return user
 
 
@@ -169,6 +189,7 @@ def logout(
     db: Session = Depends(get_db),
 ):
     if session:
+        delete_session(session)
         row = db.execute(
             select(UserSession).where(UserSession.token == session)
         ).scalar_one_or_none()
@@ -214,4 +235,5 @@ def put_preferences(
     user.countries = req.countries
     db.commit()
     db.refresh(user)
+    delete_key(foryou_key(user.id))
     return _me(user)
