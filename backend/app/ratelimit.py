@@ -47,3 +47,9 @@ rate_limit_summarise = _make_limiter(5, 60)
 
 # Voice transcription: CPU-bound local inference, same order as chat
 rate_limit_voice_transcribe = _make_limiter(20, 60)
+
+# Voice synthesis: higher ceiling than transcribe because one assistant
+# answer fans out into multiple /api/voice/speak calls, one per sentence of
+# the reply, so a single voice turn with a multi-sentence answer already
+# costs several calls.
+rate_limit_voice_speak = _make_limiter(60, 60)

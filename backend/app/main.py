@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from app.auth import current_user
 from app.auth import router as auth_router
@@ -30,13 +30,18 @@ from app.models import (
     StoryDailyMetric, StoryFeedback, User,
 )
 from app.ratelimit import (
-    rate_limit_chat, rate_limit_suggest, rate_limit_summarise, rate_limit_voice_transcribe,
+    rate_limit_chat, rate_limit_suggest, rate_limit_summarise, rate_limit_voice_speak,
+    rate_limit_voice_transcribe,
 )  # protect LLM/voice endpoints from quota abuse
 from app.retrieval import hybrid_search
 
 # Several-second voice clip: generous headroom while still bounding the
 # per-request temp file / memory use.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+# /api/voice/speak is always called with a single sentence from a frontend
+# sentence-buffer, never a whole answer, so this is a generous cap.
+MAX_SPEAK_CHARS = 500
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -1063,6 +1068,44 @@ async def transcribe_voice(file: UploadFile = File(...), user: User = Depends(cu
     if result is None:
         raise HTTPException(503, "speech-to-text model unavailable")
     return result
+
+
+class SpeakRequest(BaseModel):
+    text: str
+    voice: str | None = None
+
+
+@app.post("/api/voice/speak", dependencies=[Depends(rate_limit_voice_speak)])  # 60 req/min
+async def speak(req: SpeakRequest, user: User = Depends(current_user)):
+    """Synthesize `req.text` to speech, streaming raw PCM as it's produced.
+
+    Mono float32 samples at `voice.TTS_SAMPLE_RATE`, no container/header.
+    Streaming (rather than a single buffered response) is the point of this
+    endpoint: it lets playback start after the first sentence's audio is
+    ready instead of waiting for the whole request to finish synthesizing.
+    """
+    from app import voice
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    if len(text) > MAX_SPEAK_CHARS:
+        raise HTTPException(400, f"text too long (max {MAX_SPEAK_CHARS} characters)")
+
+    if not await run_in_threadpool(voice.tts_is_available):
+        raise HTTPException(503, "text-to-speech model unavailable")
+
+    voice_id = req.voice or voice.TTS_VOICE
+
+    async def _pcm_chunks():
+        # synthesize_stream()'s model inference is blocking CPU work per
+        # sentence; iterate_in_threadpool runs each next() call (i.e. each
+        # sentence's synthesis) in the threadpool so it never blocks the
+        # event loop, while still streaming chunks out as they're produced.
+        async for chunk in iterate_in_threadpool(voice.synthesize_stream(text, voice_id)):
+            yield chunk
+
+    return StreamingResponse(_pcm_chunks(), media_type="application/octet-stream")
 
 
 @app.get("/api/suggest", dependencies=[Depends(rate_limit_suggest)])  # 10 req/min

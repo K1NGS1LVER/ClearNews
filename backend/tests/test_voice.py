@@ -1,14 +1,16 @@
-"""Voice STT tests.
+"""Voice STT + TTS tests.
 
-Unit tests for app.voice mock WhisperModel entirely (no real model load/
-download - that's what tests/test_voice_deps.py's opt-in `real_model` marker
-is for). Integration tests for POST /api/voice/transcribe mock the STT
-singleton the same way and drive the endpoint through TestClient.
+Unit tests for app.voice mock WhisperModel/KPipeline entirely (no real model
+load/download - that's what tests/test_voice_deps.py's opt-in `real_model`
+marker is for). Integration tests for POST /api/voice/transcribe and
+POST /api/voice/speak mock the respective singleton the same way and drive
+the endpoint through TestClient.
 """
 
 import threading
 from uuid import uuid4
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -28,6 +30,8 @@ def _reset_voice_singleton(monkeypatch):
     an earlier test left behind."""
     monkeypatch.setattr(voice_mod, "_model", None)
     monkeypatch.setattr(voice_mod, "_load_failed", False)
+    monkeypatch.setattr(voice_mod, "_pipeline", None)
+    monkeypatch.setattr(voice_mod, "_tts_load_failed", False)
     yield
 
 
@@ -220,5 +224,174 @@ def test_transcribe_endpoint_rate_limited_after_configured_requests(monkeypatch)
         ]
         assert statuses[:20] == [200] * 20
         assert statuses[20] == 429
+    finally:
+        _cleanup(email)
+
+
+# ---------------------------------------------------------------------------
+# app.voice: TTS lazy singleton + synthesize_stream(), KPipeline mocked
+# ---------------------------------------------------------------------------
+
+class _FakeKPipeline:
+    """Stands in for kokoro.KPipeline. Yields one (graphemes, phonemes, audio)
+    segment per call, with a non-empty float32 array so callers can tell
+    real chunks apart from empty ones."""
+
+    def __call__(self, text, voice):
+        yield ("graphemes", "phonemes", np.array([0.1, -0.2, 0.3], dtype=np.float32))
+
+
+class _FailingSentenceKPipeline:
+    """Raises for any sentence containing 'boom', otherwise behaves like
+    _FakeKPipeline -- used to test per-sentence failure resilience."""
+
+    def __call__(self, text, voice):
+        if "boom" in text:
+            raise RuntimeError("G2P choked on this sentence")
+        yield ("graphemes", "phonemes", np.array([0.1, -0.2, 0.3], dtype=np.float32))
+
+
+def test_get_pipeline_loads_once_under_concurrent_callers():
+    """Two requests racing to first-use the pipeline must not both construct it."""
+    calls = []
+
+    def fake_loader():
+        calls.append(1)
+        return _FakeKPipeline()
+
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(voice_mod._get_pipeline(fake_loader)))
+        for _ in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(calls) == 1
+    assert len({id(r) for r in results}) == 1
+
+
+def test_tts_load_failure_short_circuits_without_retry():
+    """A load failure (corrupt cache, OOM, ...) must not be retried on every call."""
+    calls = []
+
+    def failing_loader():
+        calls.append(1)
+        raise RuntimeError("corrupt cache")
+
+    assert voice_mod._get_pipeline(failing_loader) is None
+    assert voice_mod._get_pipeline(failing_loader) is None
+    assert len(calls) == 1
+
+
+def test_tts_is_available_true_once_loaded(monkeypatch):
+    monkeypatch.setattr(voice_mod, "_pipeline", _FakeKPipeline())
+    assert voice_mod.tts_is_available() is True
+
+
+def test_tts_is_available_false_when_load_failed(monkeypatch):
+    monkeypatch.setattr(voice_mod, "_tts_load_failed", True)
+    assert voice_mod.tts_is_available() is False
+
+
+def test_synthesize_stream_yields_one_chunk_per_sentence(monkeypatch):
+    monkeypatch.setattr(voice_mod, "_pipeline", _FakeKPipeline())
+    chunks = list(voice_mod.synthesize_stream("Hello there. How are you? Great news!"))
+    assert len(chunks) == 3
+    assert all(isinstance(c, bytes) and len(c) > 0 for c in chunks)
+
+
+def test_synthesize_stream_skips_failing_sentence_but_continues(monkeypatch):
+    """One sentence's synthesis failure must not abort the whole stream."""
+    monkeypatch.setattr(voice_mod, "_pipeline", _FailingSentenceKPipeline())
+    chunks = list(
+        voice_mod.synthesize_stream("This one is fine. This will go boom badly. This one is fine too.")
+    )
+    assert len(chunks) == 2
+
+
+def test_synthesize_stream_empty_text_yields_nothing(monkeypatch):
+    monkeypatch.setattr(voice_mod, "_pipeline", _FakeKPipeline())
+    assert list(voice_mod.synthesize_stream("   ")) == []
+
+
+def test_synthesize_stream_yields_nothing_when_pipeline_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_mod, "_tts_load_failed", True)
+    assert list(voice_mod.synthesize_stream("Hello there.")) == []
+
+
+# ---------------------------------------------------------------------------
+# POST /api/voice/speak, TTS singleton mocked via app.voice functions
+# ---------------------------------------------------------------------------
+
+def test_speak_endpoint_returns_200_with_streamed_audio(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
+    monkeypatch.setattr(
+        voice_mod, "synthesize_stream",
+        lambda text, voice: iter([b"\x00\x01\x02\x03", b"\x04\x05\x06\x07"]),
+    )
+    c, email = _authed_client()
+    try:
+        resp = c.post("/api/voice/speak", json={"text": "Hello there."})
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/octet-stream"
+        assert resp.content == b"\x00\x01\x02\x03\x04\x05\x06\x07"
+    finally:
+        _cleanup(email)
+
+
+def test_speak_endpoint_rejects_empty_text(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
+    c, email = _authed_client()
+    try:
+        resp = c.post("/api/voice/speak", json={"text": "   "})
+        assert resp.status_code == 400
+    finally:
+        _cleanup(email)
+
+
+def test_speak_endpoint_rejects_text_over_length_cap(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
+    c, email = _authed_client()
+    try:
+        resp = c.post("/api/voice/speak", json={"text": "x" * 501})
+        assert resp.status_code == 400
+    finally:
+        _cleanup(email)
+
+
+def test_speak_endpoint_requires_auth(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
+    fresh = TestClient(app)
+    resp = fresh.post("/api/voice/speak", json={"text": "Hello there."})
+    assert resp.status_code == 401
+
+
+def test_speak_endpoint_returns_503_when_model_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: False)
+    c, email = _authed_client()
+    try:
+        resp = c.post("/api/voice/speak", json={"text": "Hello there."})
+        assert resp.status_code == 503
+    finally:
+        _cleanup(email)
+
+
+def test_speak_endpoint_rate_limited_after_configured_requests(monkeypatch):
+    monkeypatch.setattr(voice_mod, "tts_is_available", lambda: True)
+    monkeypatch.setattr(voice_mod, "synthesize_stream", lambda text, voice: iter([b"\x00\x01"]))
+    c, email = _authed_client()
+    try:
+        # rate_limit_voice_speak has its own independent bucket, so the
+        # signup call above (which goes through rate_limit_auth) doesn't
+        # count against this endpoint's 60/min window.
+        statuses = [
+            c.post("/api/voice/speak", json={"text": "Hello there."}).status_code
+            for _ in range(61)
+        ]
+        assert statuses[:60] == [200] * 60
+        assert statuses[60] == 429
     finally:
         _cleanup(email)
