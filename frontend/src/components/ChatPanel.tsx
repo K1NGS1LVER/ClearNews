@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { decodeEntities } from "../api";
+import { startVad, VAD_SAMPLE_RATE, type VadSession } from "../lib/vad";
+import { pcmToWavFile } from "../lib/wav";
 import { withErrorBoundary } from "./ErrorBoundary";
 
 type Source = {
@@ -13,6 +15,8 @@ type Source = {
 };
 
 type Msg = { role: "user" | "assistant"; content: string; sources?: Source[] };
+
+type VoiceState = "idle" | "listening" | "transcribing";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
@@ -69,6 +73,16 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
+
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const vadRef = useRef<VadSession | null>(null);
+  const transcribeAbortRef = useRef<AbortController | null>(null);
+
+  // Release the mic if the panel unmounts (e.g. navigation) mid-recording.
+  useEffect(() => {
+    return () => vadRef.current?.stop();
+  }, []);
 
   useEffect(() => {
     if (storyId) {
@@ -174,6 +188,78 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
 
   function stop() {
     abortRef.current?.abort();
+  }
+
+  /** Arm the mic + VAD. Mirrors send()'s guard: don't start while an
+      answer is already streaming. */
+  async function startVoice() {
+    if (busy || voiceState !== "idle") return;
+    setVoiceError(null);
+    setVoiceState("listening");
+    try {
+      vadRef.current = await startVad(handleSpeechEnd);
+    } catch (err) {
+      vadRef.current = null;
+      setVoiceState("idle");
+      setVoiceError(
+        err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")
+          ? "Microphone access was denied."
+          : "Couldn't start voice input.",
+      );
+    }
+  }
+
+  /** Manual cancel, available for the whole listening/transcribing
+      lifetime - both an accessibility requirement and a fallback for VAD
+      misfires or a mid-recording change of mind. */
+  function cancelVoice() {
+    vadRef.current?.stop();
+    vadRef.current = null;
+    transcribeAbortRef.current?.abort();
+    transcribeAbortRef.current = null;
+    setVoiceState("idle");
+  }
+
+  /** VAD's onSpeechEnd: package the captured clip, upload it for
+      transcription, and hand the transcript to the same send() the typed
+      input and suggested-question buttons use. */
+  async function handleSpeechEnd(audio: Float32Array) {
+    vadRef.current?.stop();
+    vadRef.current = null;
+    setVoiceState("transcribing");
+
+    const controller = new AbortController();
+    transcribeAbortRef.current = controller;
+    try {
+      const form = new FormData();
+      form.append("file", pcmToWavFile(audio, VAD_SAMPLE_RATE));
+      const resp = await fetch("/api/voice/transcribe", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+      if (!resp.ok) {
+        if (resp.status === 401) throw new Error("Please log in to use voice input.");
+        if (resp.status === 413) throw new Error("Recording too long - try a shorter clip.");
+        if (resp.status === 503) throw new Error("Voice transcription is unavailable right now.");
+        throw new Error(`transcribe failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
+      setVoiceState("idle");
+      if (transcript) {
+        send(transcript);
+      } else {
+        setVoiceError("Didn't catch anything - try again.");
+      }
+    } catch (err) {
+      setVoiceState("idle");
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setVoiceError(err instanceof Error ? err.message : "Voice transcription failed.");
+      }
+    } finally {
+      transcribeAbortRef.current = null;
+    }
   }
 
   function clearHistory() {
@@ -283,30 +369,62 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
         </div>
       )}
 
-      <form
-        className="mt-2 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={storyId ? "Ask about this story…" : "Ask across all stories…"}
-          className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2"
-          style={{ borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }}
-        />
-        <button
-          type={busy ? "button" : "submit"}
-          onClick={busy ? stop : undefined}
-          disabled={!busy && !input.trim()}
-          className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-40"
-          style={{ background: "var(--ink)", color: "var(--surface-1)" }}
+      <div className="mt-2 flex flex-col gap-1">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(input);
+          }}
         >
-          {busy ? "Stop" : "Send"}
-        </button>
-      </form>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={busy || voiceState !== "idle"}
+            placeholder={storyId ? "Ask about this story…" : "Ask across all stories…"}
+            className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-40"
+            style={{ borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }}
+          />
+          <button
+            type="button"
+            onClick={voiceState === "idle" ? startVoice : cancelVoice}
+            disabled={voiceState === "idle" && busy}
+            aria-label={
+              voiceState === "idle" ? "Record a voice question" : voiceState === "listening" ? "Stop recording" : "Cancel"
+            }
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            style={
+              voiceState === "idle"
+                ? { borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }
+                : { borderColor: "transparent", background: "var(--ink)", color: "var(--surface-1)" }
+            }
+          >
+            {voiceState === "listening" && (
+              <span className="animate-pulse" style={{ ...mono, letterSpacing: "0.04em" }}>
+                ● REC
+              </span>
+            )}
+            {voiceState === "transcribing" && (
+              <span className="loading-spinner cn-anim" style={{ width: 14, height: 14 }} />
+            )}
+            {voiceState === "idle" && "Mic"}
+          </button>
+          <button
+            type={busy ? "button" : "submit"}
+            onClick={busy ? stop : undefined}
+            disabled={!busy && (voiceState !== "idle" || !input.trim())}
+            className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-40"
+            style={{ background: "var(--ink)", color: "var(--surface-1)" }}
+          >
+            {busy ? "Stop" : "Send"}
+          </button>
+        </form>
+        {voiceError && (
+          <p className="text-xs" style={{ color: "var(--bias-right)" }}>
+            {voiceError}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
