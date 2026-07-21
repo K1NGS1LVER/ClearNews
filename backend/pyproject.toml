@@ -57,6 +57,15 @@ markers = [
 [tool.uv.sources]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
+# Kokoro's published metadata hard-pins numpy==1.26.4, which conflicts with
+# this project's numpy>=1.26,<2.4 (needed for torch/transformers/etc). This
+# override replaces Kokoro's declared requires-dist with the same list minus
+# the numpy pin, so uv's resolver can pick a numpy version that satisfies
+# everyone. Validated by the real (non-mocked) smoke test in
+# tests/test_voice_deps.py (`uv run pytest -m real_model tests/test_voice_deps.py`),
+# which loads Kokoro for real and confirms it still synthesizes audio under
+# the resolved numpy version - do not delete this override without re-running
+# that test against whatever numpy version you'd move to.
 [[tool.uv.dependency-metadata]]
 name = "kokoro"
 version = "0.7.16"

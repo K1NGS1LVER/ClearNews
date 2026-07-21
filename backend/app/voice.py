@@ -30,6 +30,10 @@ TTS_VOICE = os.getenv("TTS_VOICE", "af_heart")
 
 # Kokoro always outputs 24kHz mono float32 PCM (confirmed in Task 0's smoke
 # test); not configurable, so it's a plain constant rather than an env var.
+# frontend/src/lib/tts.ts hand-duplicates this same value (its own
+# TTS_SAMPLE_RATE constant) to decode /api/voice/speak's raw PCM stream into
+# an AudioBuffer - if this ever changes, that constant must change with it,
+# or playback will decode at the wrong pitch/speed.
 TTS_SAMPLE_RATE = 24000
 
 _model = None
@@ -187,8 +191,9 @@ def synthesize_stream(text: str, voice: str = TTS_VOICE) -> Iterator[bytes]:
                 )
                 for _graphemes, _phonemes, audio in pipeline(sentence, voice=voice)
             ]
+            chunk = np.concatenate(segments).tobytes() if segments else None
         except Exception:
             logger.warning(f"TTS skipped an unsynthesizable sentence ({sentence[:60]!r}...)", exc_info=True)
             continue
-        if segments:
-            yield np.concatenate(segments).tobytes()
+        if chunk:
+            yield chunk

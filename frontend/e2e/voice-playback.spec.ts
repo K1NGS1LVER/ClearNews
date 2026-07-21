@@ -289,6 +289,27 @@ test.describe("Voice playback (TTS)", () => {
     // above - that one is caught by the fetch chain's .catch(), this one
     // previously was not, and would silently kill every later sentence in
     // the same turn.
+    //
+    // Asserting on speakRequests alone (both fetches fired) would pass even
+    // without the fix: enqueue() fires each sentence's fetch unconditionally
+    // and independently of the `schedule` promise chain, so a bug that
+    // breaks that chain (and so never schedules sentence 2's playback) is
+    // invisible to a fetch-count assertion. Instrument
+    // AudioContext.prototype.createBufferSource - the Web Audio call that
+    // only happens once a sentence's audio is actually scheduled to play -
+    // so this test goes red if a reverted fix stops sentence 2 from ever
+    // reaching playback, not just from ever being fetched.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __scheduledCount: number };
+      w.__scheduledCount = 0;
+      const proto = window.AudioContext.prototype;
+      const original = proto.createBufferSource;
+      proto.createBufferSource = function (this: AudioContext, ...args: []) {
+        w.__scheduledCount++;
+        return original.apply(this, args);
+      };
+    });
+
     const speakRequests: string[] = [];
     await mockChatSession(page);
     await mockTranscribe(page, "tell me two things");
@@ -317,5 +338,15 @@ test.describe("Voice playback (TTS)", () => {
     await fireSpeechEnd(page);
 
     await expect.poll(() => speakRequests, { timeout: 3000 }).toEqual(["First sentence.", "Second sentence."]);
+    // The malformed first sentence must never reach scheduling; the second,
+    // well-formed one must - exactly one createBufferSource call, for
+    // "Second sentence." This is the assertion that actually depends on the
+    // tts.ts fix: it fails if the schedule chain breaks on the first
+    // sentence's decode error instead of recovering.
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __scheduledCount: number }).__scheduledCount), {
+        timeout: 3000,
+      })
+      .toBe(1);
   });
 });

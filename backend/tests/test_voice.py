@@ -208,6 +208,27 @@ def test_transcribe_endpoint_returns_503_when_model_unavailable(monkeypatch):
         _cleanup(email)
 
 
+def test_transcribe_endpoint_returns_422_for_undecodable_audio(monkeypatch):
+    """A corrupt/non-audio upload makes faster-whisper's PyAV decode step
+    raise av.error.FFmpegError; the endpoint must map that to a 422 client
+    error, not let it propagate as an opaque 500."""
+    from av.error import InvalidDataError
+
+    def _boom(_path):
+        raise InvalidDataError(-1, "invalid data found when processing input")
+
+    monkeypatch.setattr(voice_mod, "transcribe", _boom)
+    c, email = _authed_client()
+    try:
+        resp = c.post(
+            "/api/voice/transcribe",
+            files={"file": ("clip.webm", b"not actually audio", "audio/webm")},
+        )
+        assert resp.status_code == 422
+    finally:
+        _cleanup(email)
+
+
 def test_transcribe_endpoint_rate_limited_after_configured_requests(monkeypatch):
     monkeypatch.setattr(voice_mod, "transcribe", lambda path: {"transcript": "ok"})
     c, email = _authed_client()

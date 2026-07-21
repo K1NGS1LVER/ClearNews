@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
-from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import current_user
 from app.auth import router as auth_router
@@ -1038,6 +1038,8 @@ async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session
 
 @app.post("/api/voice/transcribe", dependencies=[Depends(rate_limit_voice_transcribe)])  # 20 req/min
 async def transcribe_voice(file: UploadFile = File(...), user: User = Depends(current_user)):
+    from av.error import FFmpegError
+
     from app import voice
 
     suffix = os.path.splitext(file.filename or "")[1] or ".webm"
@@ -1057,7 +1059,19 @@ async def transcribe_voice(file: UploadFile = File(...), user: User = Depends(cu
         if total == 0:
             raise HTTPException(400, "empty audio upload")
 
-        result = await run_in_threadpool(voice.transcribe, tmp.name)
+        try:
+            result = await run_in_threadpool(voice.transcribe, tmp.name)
+        except FFmpegError:
+            # Corrupt/non-audio upload: faster-whisper's PyAV decode step
+            # raises av.error.FFmpegError (e.g. InvalidDataError) rather than
+            # producing a transcript. The request itself was well-formed, so
+            # this is a client error (422), not an opaque unhandled 500.
+            import logging
+
+            logging.getLogger("uvicorn").warning(
+                "voice transcribe: upload could not be decoded as audio", exc_info=True
+            )
+            raise HTTPException(422, "could not process audio (corrupt or unsupported format)")
     finally:
         tmp.close()  # no-op if already closed above
         try:
@@ -1097,15 +1111,12 @@ async def speak(req: SpeakRequest, user: User = Depends(current_user)):
 
     voice_id = req.voice or voice.TTS_VOICE
 
-    async def _pcm_chunks():
-        # synthesize_stream()'s model inference is blocking CPU work per
-        # sentence; iterate_in_threadpool runs each next() call (i.e. each
-        # sentence's synthesis) in the threadpool so it never blocks the
-        # event loop, while still streaming chunks out as they're produced.
-        async for chunk in iterate_in_threadpool(voice.synthesize_stream(text, voice_id)):
-            yield chunk
-
-    return StreamingResponse(_pcm_chunks(), media_type="application/octet-stream")
+    # synthesize_stream()'s model inference is blocking CPU work per sentence;
+    # StreamingResponse already runs a plain sync generator's next() calls
+    # through iterate_in_threadpool internally, so each sentence's synthesis
+    # never blocks the event loop while still streaming chunks out as
+    # they're produced - no need to wrap it ourselves.
+    return StreamingResponse(voice.synthesize_stream(text, voice_id), media_type="application/octet-stream")
 
 
 @app.get("/api/suggest", dependencies=[Depends(rate_limit_suggest)])  # 10 req/min
