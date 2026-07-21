@@ -242,6 +242,29 @@ docker compose run --rm backend uv run python -m pipeline.backfill 45 2
 
 ## Local development
 
+Once Postgres and Redis/Valkey are installed and running (see
+[Prerequisites](#prerequisites) for your OS), one command does the rest -
+checks everything's in place, creates the `clearnews` database, copies the
+env file, installs backend + frontend deps, and runs migrations. Safe to
+re-run any time; every step skips cleanly if already done:
+
+```bash
+./setup.sh
+```
+
+Then add your `GROQ_API_KEY` to `backend/.env` (free at
+[console.groq.com](https://console.groq.com)) and start both servers:
+
+```bash
+./dev.sh   # API on :8000, UI on :5173, Ctrl-C stops both
+```
+
+On first launch the backend detects an empty database and runs the full
+bootstrap pipeline automatically, same as the Docker path above.
+
+<details>
+<summary><strong>What setup.sh runs, if you'd rather do it by hand (or it fails partway)</strong></summary>
+
 ```bash
 # 1. database + Redis/Valkey - see the Prerequisites section above for your OS
 createdb clearnews   # if you haven't already
@@ -257,19 +280,13 @@ uv run alembic upgrade head             # create/upgrade schema
 # 3. frontend
 cd ../frontend
 pnpm install
-
-# 4. run both together
-cd ..
-./dev.sh   # API on :8000, UI on :5173, Ctrl-C stops both
 ```
-
-On first launch the backend detects an empty database and runs the full
-bootstrap pipeline automatically, same as the Docker path above.
 
 > **macOS only:** torch, scikit-learn, and xgboost each bundle their own
 > `libomp.dylib`; having two OpenMP runtimes loaded in one process segfaults
 > under load. Run `uv run python scripts/unify_libomp.py` after every
 > `uv sync`. Not needed on Linux, Windows, or Docker.
+</details>
 
 ## Configuration
 
@@ -347,6 +364,8 @@ Supabase (Postgres/pgvector): see [docs/DEPLOY.md](docs/DEPLOY.md).
 ## Project layout
 
 ```
+setup.sh             one-shot local dev setup (deps, DB, env file, migrations)
+dev.sh               runs backend + frontend together, hot reload
 backend/app/         FastAPI app, SQLAlchemy models, auth
 backend/alembic/     schema migrations
 backend/pipeline/    ingestion, NLP, clustering, analytics jobs

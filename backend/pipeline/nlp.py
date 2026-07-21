@@ -115,6 +115,33 @@ def extract_mentioned_countries(doc) -> list[str]:
     return sorted(c for c in codes if c)
 
 
+def _enrich(session: Session, todo: list[tuple[Article, str]]) -> int:
+    """Embed, score, and tag a batch of (article, text) pairs; commits.
+
+    Shared by pipeline.nlp's batch sweep and pipeline.nlp_worker's
+    queue-driven path - same per-article work, different article selection.
+    """
+    texts = [t for _, t in todo]
+    embeddings = _embedder().encode(texts, batch_size=64)
+    biases = score_bias(texts)
+    vader = _vader()
+
+    for (article, text), emb, (bias_label, bias_score) in zip(todo, embeddings, biases):
+        doc = _spacy()(text)
+        article.embedding = emb
+        article.sentiment = vader.polarity_scores(text)["compound"]
+        article.bias_label = bias_label
+        article.bias_score = bias_score
+        article.entities = _entities_from_doc(doc)
+        if not article.mentioned_countries:
+            # GKG's V2Locations already populated this for firehose-sourced
+            # articles (pipeline/gdelt.py); this is the fallback for the rest
+            article.mentioned_countries = extract_mentioned_countries(doc)
+
+    session.commit()
+    return len(todo)
+
+
 def process_batch(session: Session, batch_size: int = 256) -> int:
     """Enrich one batch of unprocessed articles. Returns rows processed."""
     articles = (
@@ -135,26 +162,7 @@ def process_batch(session: Session, batch_size: int = 256) -> int:
     todo = [(a, t) for a, t in todo if t]
     if not todo:
         return 0
-
-    texts = [t for _, t in todo]
-    embeddings = _embedder().encode(texts, batch_size=64)
-    biases = score_bias(texts)
-    vader = _vader()
-
-    for (article, text), emb, (bias_label, bias_score) in zip(todo, embeddings, biases):
-        doc = _spacy()(text)
-        article.embedding = emb
-        article.sentiment = vader.polarity_scores(text)["compound"]
-        article.bias_label = bias_label
-        article.bias_score = bias_score
-        article.entities = _entities_from_doc(doc)
-        if not article.mentioned_countries:
-            # GKG's V2Locations already populated this for firehose-sourced
-            # articles (pipeline/gdelt.py); this is the fallback for the rest
-            article.mentioned_countries = extract_mentioned_countries(doc)
-
-    session.commit()
-    return len(todo)
+    return _enrich(session, todo)
 
 
 def process_all(batch_size: int = 256) -> int:

@@ -8,8 +8,7 @@ Run: uv run python -m pipeline.bootstrap
 
 import subprocess
 import sys
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 from app.db import SessionLocal, engine
 from app.models import Base
@@ -45,7 +44,6 @@ def bootstrap() -> dict:
 
     # 2. warm the embedder in background while we fetch content
     print("warming NLP models in background...")
-    model_future = None
     with ThreadPoolExecutor(max_workers=1) as pool:
         model_future = pool.submit(_embedder)
 
@@ -54,9 +52,7 @@ def bootstrap() -> dict:
         fetch_result = run_fetch_parallel(limit=500, workers=DEFAULT_WORKERS)
         print(f"fetched: {fetch_result}")
 
-    # ensure model is ready
-    if model_future:
-        model_future.result()
+    model_future.result()  # ensure model is ready
 
     # 4. NLP enrichment (CPU-bound: embeddings, sentiment, bias, NER)
     print("running NLP enrichment...")

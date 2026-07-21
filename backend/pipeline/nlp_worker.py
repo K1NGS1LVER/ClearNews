@@ -10,25 +10,14 @@ Run: uv run python -m pipeline.nlp_worker [batch_size] [poll_interval]
 
 import sys
 import time
-from functools import lru_cache
 
-import torch
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.cache import nlp_queue_pop, nlp_queue_length
 from app.db import SessionLocal
 from app.models import Article
-from pipeline.country_codes import gdelt_name_to_iso2
-from pipeline.nlp import (
-    _bias_pipeline,
-    _embedder,
-    _spacy,
-    _vader,
-    BIAS_LABELS,
-    _entities_from_doc,
-    extract_mentioned_countries,
-)
+from pipeline.nlp import _enrich, _text_of
 
 BATCH_SIZE = 256
 POLL_INTERVAL = 5.0  # seconds between polls when queue is empty
@@ -49,41 +38,11 @@ def process_ids(session: Session, article_ids: list[int]) -> int:
         .scalars()
         .all()
     )
-    todo = [(a, (a.content or a.title)) for a in articles if (a.content or a.title)]
+    todo = [(a, _text_of(a)) for a in articles]
+    todo = [(a, t) for a, t in todo if t]
     if not todo:
         return 0
-
-    texts = [t for _, t in todo]
-    embeddings = _embedder().encode(texts, batch_size=64)
-    biases = score_bias(texts)
-    vader = _vader()
-
-    for (article, text), emb, (bias_label, bias_score) in zip(todo, embeddings, biases):
-        doc = _spacy()(text)
-        article.embedding = emb
-        article.sentiment = vader.polarity_scores(text)["compound"]
-        article.bias_label = bias_label
-        article.bias_score = bias_score
-        article.entities = _entities_from_doc(doc)
-        if not article.mentioned_countries:
-            article.mentioned_countries = extract_mentioned_countries(doc)
-
-    session.commit()
-    return len(todo)
-
-
-def score_bias(texts: list[str]) -> list[tuple[str, float]]:
-    tokenizer, model = _bias_pipeline()
-    enc = tokenizer(
-        texts, return_tensors="pt", truncation=True, max_length=512, padding=True
-    )
-    with torch.no_grad():
-        probs = torch.softmax(model(**enc).logits, dim=-1)
-    out = []
-    for p in probs:
-        label = BIAS_LABELS[int(p.argmax())]
-        out.append((label, float(p[2] - p[0])))
-    return out
+    return _enrich(session, todo)
 
 
 def run(batch_size: int = BATCH_SIZE, poll_interval: float = POLL_INTERVAL) -> None:
