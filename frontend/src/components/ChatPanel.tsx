@@ -149,7 +149,10 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ story_id: storyId ?? null }),
         });
-        if (!created.ok) throw new Error(`session failed: ${created.status}`);
+        if (!created.ok) {
+        const body = await created.text().catch(() => "");
+        throw new Error(created.status === 401 ? "Please sign in to use the chat." : `session failed: ${created.status} ${body}`);
+      }
         activeSessionId = (await created.json()).id;
         setSessionId(activeSessionId);
       }
@@ -162,7 +165,10 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
           content: text,
         }),
       });
-      if (!resp.ok || !resp.body) throw new Error(`chat failed: ${resp.status}`);
+      if (!resp.ok || !resp.body) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(resp.status === 401 ? "Please sign in to use the chat." : `chat failed: ${resp.status} ${body}`);
+      }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -226,7 +232,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       } else {
         setMessages((ms) => [
           ...ms.slice(0, -1),
-          { role: "assistant", content: "Something went wrong. Is the agent configured (GROQ_API_KEY)?" },
+          { role: "assistant", content: err instanceof Error ? err.message : "Something went wrong. Please try again." },
         ]);
       }
     } finally {
