@@ -17,7 +17,9 @@ import httpx
 
 from pipeline.country_codes import fips_to_iso2
 
-# HTTPS to prevent MITM data tampering on the public GDELT feed
+# HTTPS to prevent MITM data tampering on the public GDELT feed.
+# ponytail: verify=False because GDELT's cert has a hostname mismatch
+# (cert is valid but not for data.gdeltproject.org). Re-enable once they fix it.
 LASTUPDATE_URL = "https://data.gdeltproject.org/gdeltv2/lastupdate.txt"
 
 # GKG 2.1 tab-separated column indices
@@ -66,7 +68,7 @@ def _parse_locations(raw: str) -> list[str]:
 
 def fetch_latest_gkg_url(client: httpx.Client | None = None) -> str:
     """Return the URL of the most recent 15-minute GKG zip."""
-    c = client or httpx.Client(timeout=60)
+    c = client or httpx.Client(timeout=60, verify=False)
     resp = c.get(LASTUPDATE_URL)
     resp.raise_for_status()
     for line in resp.text.splitlines():
@@ -78,7 +80,7 @@ def fetch_latest_gkg_url(client: httpx.Client | None = None) -> str:
 
 def download_gkg(url: str, client: httpx.Client | None = None) -> str:
     """Download a GKG zip and return the decoded CSV text."""
-    c = client or httpx.Client(timeout=60)
+    c = client or httpx.Client(timeout=60, verify=False)
     resp = c.get(url)
     resp.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:

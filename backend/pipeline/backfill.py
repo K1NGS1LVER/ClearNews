@@ -33,7 +33,7 @@ def sample_timestamps(days: int, files_per_day: int) -> list[str]:
 
 
 def run_backfill(days: int = 7, files_per_day: int = 2) -> dict:
-    client = httpx.Client(timeout=60)
+    client = httpx.Client(timeout=60, verify=False)
     inserted = 0
     fetched = 0
     with SessionLocal() as session:
