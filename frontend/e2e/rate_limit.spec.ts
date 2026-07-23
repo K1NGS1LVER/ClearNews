@@ -41,23 +41,12 @@ test.describe("Auth rate limiting", () => {
 });
 
 test.describe("Suggest rate limiting", () => {
-  test("blocks excessive suggest requests", async ({ page }) => {
-    const email = `e2e-ratelimit-suggest+${Date.now()}@test.local`;
-
-    // sign up
-    await page.goto("/signup");
-    await page.fill("input:not([type])", "RL Chat");
-    await page.fill("input[type=email]", email);
-    await page.fill("input[type=password]", PASSWORD);
-    await page.click("button:has-text('Create account')");
-    await page.waitForURL("**/welcome", { timeout: 10_000 });
-
-    // hit /api/suggest rapidly
+  test("blocks excessive suggest requests", async ({ request }) => {
+    // suggest is 10/min, hit it rapidly (no auth needed)
     let got429 = false;
-    for (let i = 0; i < 30; i++) {
-      const resp = await page.request.post(
-        "http://localhost:8000/api/suggest",
-        { data: { query: "hello", n_results: 3 } }
+    for (let i = 0; i < 25; i++) {
+      const resp = await request.get(
+        "http://localhost:8000/api/suggest?context=hello"
       );
       if (resp.status() === RATE_LIMIT_STATUS) {
         got429 = true;

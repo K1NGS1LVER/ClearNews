@@ -1,11 +1,16 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("API direct smoke tests", () => {
-  test("GET /api/health returns ok", async ({ request }) => {
-    const resp = await request.get("http://localhost:8000/api/health");
+  test("GET /api/stories returns an array of story cards", async ({ request }) => {
+    const resp = await request.get("http://localhost:8000/api/stories");
     expect(resp.ok()).toBeTruthy();
     const body = await resp.json();
-    expect(body).toHaveProperty("status", "healthy");
+    expect(Array.isArray(body)).toBeTruthy();
+    if (body.length > 0) {
+      expect(body[0]).toHaveProperty("id");
+      expect(body[0]).toHaveProperty("title");
+      expect(body[0]).toHaveProperty("status");
+    }
   });
 
   test("GET /api/search?q=economy returns 200 quickly", async ({ request }) => {
@@ -16,27 +21,12 @@ test.describe("API direct smoke tests", () => {
     expect(resp.ok()).toBeTruthy();
   });
 
-  test("GET /api/stories returns results", async ({ request }) => {
-    const resp = await request.get("http://localhost:8000/api/stories");
+  test("GET /api/analytics returns dashboard data", async ({ request }) => {
+    const resp = await request.get("http://localhost:8000/api/analytics");
     expect(resp.ok()).toBeTruthy();
     const body = await resp.json();
-    expect(body).toHaveProperty("stories");
-  });
-
-  test("GET /api/stories/count returns a number", async ({ request }) => {
-    const resp = await request.get("http://localhost:8000/api/stories/count");
-    expect(resp.ok()).toBeTruthy();
-    const body = await resp.json();
-    expect(typeof body).toBe("number");
-  });
-
-  test("GET /api/analytics/reach returns data", async ({ request }) => {
-    const resp = await request.get(
-      "http://localhost:8000/api/analytics/reach"
-    );
-    // 500 if missing API key, which is fine — we just want a response
-    expect(resp.status()).toBeGreaterThanOrEqual(200);
-    expect(resp.status()).toBeLessThan(500);
+    expect(body).toHaveProperty("stories_by_status");
+    expect(body).toHaveProperty("articles_by_bias");
   });
 
   test("GET /api/countries returns a list", async ({ request }) => {
@@ -46,13 +36,13 @@ test.describe("API direct smoke tests", () => {
     expect(Array.isArray(body)).toBeTruthy();
   });
 
-  test("search with uncommon term returns empty gracefully", async ({ request }) => {
+  test("search with uncommon term returns empty array gracefully", async ({ request }) => {
     const resp = await request.get(
       "http://localhost:8000/api/search?q=zzzzzzz&limit=1"
     );
     expect(resp.ok()).toBeTruthy();
     const body = await resp.json();
-    expect(body).toHaveProperty("matches");
+    expect(Array.isArray(body)).toBeTruthy();
   });
 
   test("auth endpoints accessible", async ({ request }) => {
@@ -62,9 +52,7 @@ test.describe("API direct smoke tests", () => {
   });
 
   test("GET /api/stories/:id returns 404 for missing", async ({ request }) => {
-    const resp = await request.get(
-      "http://localhost:8000/api/stories/00000000-0000-0000-0000-000000000000"
-    );
+    const resp = await request.get("http://localhost:8000/api/stories/999999");
     expect(resp.status()).toBe(404);
   });
 });

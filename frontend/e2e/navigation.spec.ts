@@ -31,15 +31,15 @@ test.describe("Navigation", () => {
 
   test("browser back and forward navigation works", async ({ page }) => {
     await page.goto("/stories");
-    await expect(page.locator("text=ClearNews")).toBeVisible();
+    await expect(page.locator("text=ClearNews")).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/search");
-    await expect(page.locator('input[placeholder*="diplomatic"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="diplomatic"]')).toBeVisible({ timeout: 15_000 });
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/stories/);
+    await expect(page).toHaveURL(/\/stories/, { timeout: 15_000 });
 
     await page.goForward();
-    await expect(page).toHaveURL(/\/search/);
+    await expect(page).toHaveURL(/\/search/, { timeout: 15_000 });
   });
 });

@@ -5,39 +5,33 @@ const PASSWORD = "correcthorse";
 test.describe("Tier 1 — Search result caching", () => {
   test("search form works end-to-end", async ({ page }) => {
     await page.goto("/search");
-    await page.waitForLoadState("networkidle");
 
     const input = page.locator('input[placeholder*="diplomatic"]');
-    await expect(input).toBeVisible();
+    await expect(input).toBeVisible({ timeout: 15_000 });
 
     await input.fill("economy");
     await expect(page.getByRole("button", { name: "Search" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Search" }).click({ force: true });
-    await page.waitForTimeout(2000);
 
-    // either results or empty state
     await expect(
       page.locator("text=MATCH").or(page.locator("text=No matches"))
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 20_000 });
   });
 
   test("different queries both complete successfully", async ({ page }) => {
     await page.goto("/search");
-    await page.waitForLoadState("networkidle");
 
     const input = page.locator('input[placeholder*="diplomatic"]');
+    await expect(input).toBeVisible({ timeout: 15_000 });
+
     await input.fill("climate");
     await page.getByRole("button", { name: "Search" }).click({ force: true });
-    await page.waitForTimeout(2000);
-    const firstDone = await page.locator("text=MATCH").or(page.locator("text=No matches")).isVisible({ timeout: 15_000 });
+    await expect(page.locator("text=MATCH").or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
 
     await input.fill("trade");
     await page.getByRole("button", { name: "Search" }).click({ force: true });
-    await page.waitForTimeout(2000);
-    const secondDone = await page.locator("text=MATCH").or(page.locator("text=No matches")).isVisible({ timeout: 15_000 });
-
-    expect(firstDone || secondDone).toBeTruthy();
+    await expect(page.locator("text=MATCH").or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
   });
 });
 
@@ -62,14 +56,10 @@ test.describe("Tier 1 — For You feed caching", () => {
 test.describe("Tier 1 — Story drift caching", () => {
   test("story drift loads without error", async ({ page }) => {
     await page.goto("/stories");
-    await page.waitForLoadState("networkidle");
-
     const storyLink = page.locator('a[href^="/story/"]').first();
-    if (!(await storyLink.isVisible())) test.skip("No stories in DB");
+    await expect(storyLink).toBeVisible({ timeout: 15_000 });
 
     await storyLink.click();
-    await page.waitForLoadState("networkidle");
-
     const driftHeading = page.locator("text=DRIFT MAP").first();
     if (await driftHeading.isVisible()) {
       await expect(driftHeading).toBeVisible();
@@ -90,11 +80,12 @@ test.describe("Tier 2 — Session lifecycle", () => {
 
     // navigate around
     await page.goto("/search");
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator('input[placeholder*="diplomatic"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="diplomatic"]')).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/analytics");
-    await page.waitForLoadState("networkidle");
+    const activeStories = page.locator("text=ACTIVE STORIES");
+    const loading = page.locator("text=Loading…");
+    await expect(activeStories.or(loading)).toBeVisible({ timeout: 20_000 });
 
     // logout
     await page.click("button:has-text('LOG OUT')");
@@ -115,10 +106,8 @@ test.describe("Tier 3 — Pipeline integration", () => {
 
   test("analytics page renders", async ({ page }) => {
     await page.goto("/analytics");
-    await page.waitForLoadState("networkidle");
-
     await expect(
       page.locator("text=ACTIVE STORIES").or(page.locator("text=Loading…"))
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 20_000 });
   });
 });

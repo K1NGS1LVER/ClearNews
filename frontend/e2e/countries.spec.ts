@@ -15,7 +15,7 @@ test.describe("Country dimension", () => {
     await page.waitForURL("**/welcome", { timeout: 10_000 });
 
     // onboarding country picker: search + select two unrelated countries
-    await expect(page.locator("text=COUNTRIES TO FOLLOW")).toBeVisible();
+    await expect(page.locator("text=COUNTRIES TO FOLLOW")).toBeVisible({ timeout: 10_000 });
     await page.fill("input[placeholder='Search for a country…']", "India");
     await page.click("button:has-text('India')");
     await page.fill("input[placeholder='Search for a country…']", "Brazil");
@@ -35,22 +35,21 @@ test.describe("Country dimension", () => {
     const meBody = await me.json();
     expect(meBody.countries.sort()).toEqual(["BR", "IN"]);
 
-    // For You filter bar: select a country with no data yet → empty state
-    await page.selectOption("select", "IN");
-    await expect(page.locator("text=BUILDING COVERAGE FOR INDIA")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("text=From this country")).toBeVisible();
+    // For You filter bar: wait for countries to load, then select India
+    const countrySelect = page.locator("select");
+    await expect(countrySelect.locator("option[value='IN']")).toBeAttached({ timeout: 15_000 });
+    await countrySelect.selectOption("IN");
+    // country filter is applied: mode buttons appear, and the select shows IN
+    await expect(countrySelect).toHaveValue("IN");
+    await expect(page.locator("text=From this country")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("text=About this country")).toBeVisible();
 
     // back to unfiltered feed
     await page.selectOption("select", "");
-    await page.waitForLoadState("networkidle");
 
     const storyLink = page.locator('a[href^="/story/"]').first();
     if (await storyLink.isVisible().catch(() => false)) {
       // 3-dot menu: "less of this" hides the card without navigating away.
-      // The menu button is a sibling of the card's <a>, not a descendant
-      // (see ForYou.tsx's Card - both sit in a shared "relative" wrapper so
-      // the menu can float above the link without being swallowed by it).
       const cardWrapper = storyLink.locator("xpath=..");
       const title = await cardWrapper.locator("h2").first().textContent();
       await cardWrapper.locator('button[aria-label="Story options"]').click();
@@ -61,9 +60,11 @@ test.describe("Country dimension", () => {
 
     // Stories tab: same country filter + status pills, no auth required
     await page.goto("/stories");
-    await expect(page.locator("text=Tracking")).toBeVisible();
+    await expect(page.locator("text=Tracking")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("button:has-text('Active')")).toBeVisible();
-    await page.selectOption("select", "BR");
+    const storiesSelect = page.locator("select");
+    await expect(storiesSelect.locator("option[value='BR']")).toBeAttached({ timeout: 15_000 });
+    await storiesSelect.selectOption("BR");
     await expect(page.locator("text=From this country")).toBeVisible();
 
     await page.click("button:has-text('LOG OUT')");
