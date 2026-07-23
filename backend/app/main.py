@@ -23,7 +23,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth import current_user
 from app.auth import router as auth_router
-from app.cache import delete_key, foryou_key, get_json, set_json, umap_key
+from app.cache import (
+    bump_foryou_version, delete_key, foryou_key, foryou_version,
+    get_json, set_json, umap_key,
+)
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
 from app.models import (
@@ -397,7 +400,7 @@ def for_you(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    cache_key = foryou_key(user.id)
+    cache_key = f"{foryou_key(user.id)}:v{foryou_version()}"
     cached = get_json(cache_key)
     if cached is not None:
         return [ForYouCard(**c) for c in cached]
@@ -557,7 +560,9 @@ def story_feedback(
         user.category_weights = weights
 
     db.commit()
-    delete_key(foryou_key(user.id))
+    # Invalidate this user's ForYou cache (version key includes the current
+    # generation, so deleting the versioned key is sufficient).
+    delete_key(f"{foryou_key(user.id)}:v{foryou_version()}")
     return {"ok": True}
 
 

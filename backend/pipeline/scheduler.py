@@ -51,7 +51,14 @@ def hourly() -> None:
             break
         total += processed
         print(f"nlp_worker: processed {total} from queue")
-    print(f"hourly: NLP done ({total} articles)")
+    # DB fallback: if Redis lost queue entries (transient failure, flush,
+    # crash), articles with embedding IS NULL accumulate silently. The
+    # nightly reconciliation catches them too, but that's up to 12h of
+    # staleness - catch them here instead.
+    fallback = nlp_process_all()
+    if fallback:
+        print(f"hourly: NLP DB fallback processed {fallback} articles")
+    print(f"hourly: NLP done ({total} from queue + {fallback} fallback)")
     with SessionLocal() as session:
         print(run_clustering(session))
     print(run_metrics())

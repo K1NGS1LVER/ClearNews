@@ -17,7 +17,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.cache import delete_key, umap_key
+from app.cache import bump_foryou_version, delete_key, umap_key
 from app.db import SessionLocal
 from app.models import Article, Story
 
@@ -91,6 +91,11 @@ def run_clustering(session: Session, window_days: int = WINDOW_DAYS) -> dict:
         story.last_seen = max(story.last_seen, max(a.published_at for a in members))
 
     session.commit()
+
+    # New stories were created - invalidate all ForYou caches so users see
+    # them on next load instead of waiting for the TTL to expire.
+    if created:
+        bump_foryou_version()
 
     # Membership changed for these stories, so their cached UMAP projection
     # (app/main.py's story_drift) is stale - drop it rather than waiting out
