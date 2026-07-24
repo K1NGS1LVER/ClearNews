@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.main import app
-from app.models import User
+from app.models import PasswordResetToken, User
 
 client = TestClient(app)
 
@@ -168,5 +168,78 @@ def test_logout_clears_session():
         assert out.status_code == 200
         me = client.get("/api/me")
         assert me.status_code == 401
+    finally:
+        _cleanup(email)
+
+
+def test_forgot_password_is_always_ok_even_for_unknown_email():
+    # generic response regardless of whether the email is registered, so this
+    # endpoint can't be used to enumerate accounts
+    resp = client.post(
+        "/api/auth/forgot-password", json={"email": "nobody-here@test.local"}
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_reset_password_full_flow():
+    # one signup covering the whole flow, to stay under the password_reset
+    # rate limit (10/min/IP - see ratelimit.py)
+    email, resp = _signup()
+    try:
+        assert resp.status_code == 200
+
+        forgot = client.post("/api/auth/forgot-password", json={"email": email})
+        assert forgot.status_code == 200
+
+        with SessionLocal() as db:
+            user = db.execute(
+                select(User).where(User.email == email)
+            ).scalar_one()
+            token_row = db.execute(
+                select(PasswordResetToken).where(
+                    PasswordResetToken.user_id == user.id
+                )
+            ).scalar_one()
+            token = token_row.token
+
+        too_short = client.post(
+            "/api/auth/reset-password", json={"token": token, "password": "short"}
+        )
+        assert too_short.status_code == 400
+
+        bad_token = client.post(
+            "/api/auth/reset-password",
+            json={"token": "not-a-real-token", "password": "newcorrecthorse"},
+        )
+        assert bad_token.status_code == 400
+
+        reset = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "password": "newcorrecthorse"},
+        )
+        assert reset.status_code == 200
+
+        # token is single-use
+        reused = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "password": "yetanotherpass"},
+        )
+        assert reused.status_code == 400
+
+        # old password no longer works, new password does
+        fresh = TestClient(app)
+        old_login = fresh.post(
+            "/api/auth/login", json={"email": email, "password": "correcthorse"}
+        )
+        assert old_login.status_code == 401
+        new_login = fresh.post(
+            "/api/auth/login", json={"email": email, "password": "newcorrecthorse"}
+        )
+        assert new_login.status_code == 200
+
+        # the reset also invalidated the session from signup
+        stale_session_check = client.get("/api/me")
+        assert stale_session_check.status_code == 401
     finally:
         _cleanup(email)

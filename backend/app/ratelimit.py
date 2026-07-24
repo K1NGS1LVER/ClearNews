@@ -42,6 +42,10 @@ def _make_limiter(name: str, limit: int, window: int):
 # Auth endpoints: 10 attempts/min/IP
 rate_limit_auth = _make_limiter("auth", 10, 60)
 
+# Password reset (forgot + reset): separate bucket so a locked-out user
+# retrying a reset link doesn't also burn through the signup/login budget.
+rate_limit_password_reset = _make_limiter("password_reset", 10, 60)
+
 # LLM-powered endpoints: 20 chat, 10 suggest, 5 summarise per minute
 rate_limit_chat = _make_limiter("chat", 20, 60)
 rate_limit_suggest = _make_limiter("suggest", 10, 60)

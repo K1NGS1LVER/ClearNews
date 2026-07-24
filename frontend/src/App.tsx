@@ -9,9 +9,11 @@ import Article from "./pages/Article";
 import Chat from "./pages/Chat";
 import Feed from "./pages/Feed";
 import Loading from "./components/Loading";
+import ForgotPassword from "./pages/ForgotPassword";
 import ForYou from "./pages/ForYou";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Search from "./pages/Search";
 import Signup from "./pages/Signup";
 import Story from "./pages/Story";
@@ -49,6 +51,22 @@ function Root() {
   if (isLoading) return <Loading />;
   if (me) return <Navigate to="/foryou" replace />;
   return <Landing />;
+}
+
+function NotFound() {
+  return (
+    <div className="mx-auto flex max-w-4xl flex-col items-start gap-3 px-4 py-16 sm:px-8">
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+        404
+      </span>
+      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>
+        Page not found
+      </h1>
+      <Link to="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>
+        ← Back home
+      </Link>
+    </div>
+  );
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -178,6 +196,8 @@ export default function App() {
           <Route path="/chat" element={page("Chat", <Chat />, pathname)} />
           <Route path="/login" element={page("Login", <Login />, pathname)} />
           <Route path="/signup" element={page("Signup", <Signup />, pathname)} />
+          <Route path="/forgot-password" element={page("ForgotPassword", <ForgotPassword />, pathname)} />
+          <Route path="/reset-password" element={page("ResetPassword", <ResetPassword />, pathname)} />
           <Route
             path="/welcome"
             element={page(
@@ -198,6 +218,7 @@ export default function App() {
               pathname,
             )}
           />
+          <Route path="*" element={page("NotFound", <NotFound />, pathname)} />
         </Routes>
       </main>
 

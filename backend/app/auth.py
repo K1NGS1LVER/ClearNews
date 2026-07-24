@@ -9,7 +9,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,14 +22,15 @@ from app.cache import (
 )
 from app.countries import SUPPORTED_COUNTRIES
 from app.db import get_db
-from app.models import User, UserSession
-from app.ratelimit import rate_limit_auth
+from app.models import PasswordResetToken, User, UserSession
+from app.ratelimit import rate_limit_auth, rate_limit_password_reset
 from pipeline.topics import CATEGORY_PROMPTS
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
 SESSION_COOKIE = "session"
 SESSION_MAX_AGE = 30 * 86400
+RESET_TOKEN_MAX_AGE = 3600
 IS_PRODUCTION = os.getenv("ENV") == "production"
 hasher = PasswordHasher()
 
@@ -52,6 +53,15 @@ class SignupRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     password: str
 
 
@@ -197,6 +207,59 @@ def logout(
             db.delete(row)
             db.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.post("/auth/forgot-password", dependencies=[Depends(rate_limit_password_reset)])
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.execute(
+        select(User).where(User.email == req.email.lower())
+    ).scalar_one_or_none()
+    # Always return the same generic response whether or not the email is
+    # registered, so this endpoint can't be used to enumerate accounts.
+    if user:
+        db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+        token = secrets.token_urlsafe(32)
+        db.add(
+            PasswordResetToken(
+                token=token,
+                user_id=user.id,
+                expires_at=datetime.now(UTC) + timedelta(seconds=RESET_TOKEN_MAX_AGE),
+            )
+        )
+        db.commit()
+        # ponytail: dev-mode stub - no email provider is configured yet, so
+        # the reset link goes to the server console instead of an inbox.
+        # Swap this print for a real email send when a provider is chosen.
+        frontend_origin = os.getenv("FRONTEND_ORIGIN", "").split(",")[0] or "http://localhost:5173"
+        print(f"[DEV] password reset link for {user.email}: {frontend_origin}/reset-password?token={token}")
+    return {"ok": True}
+
+
+@router.post("/auth/reset-password", dependencies=[Depends(rate_limit_password_reset)])
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    if len(req.password) < 8:
+        raise HTTPException(400, "password too short")
+    row = db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token == req.token)
+    ).scalar_one_or_none()
+    if not row or row.expires_at < datetime.now(UTC):
+        raise HTTPException(400, "invalid or expired reset link")
+    user = db.get(User, row.user_id)
+    if not user:
+        raise HTTPException(400, "invalid or expired reset link")
+    user.password_hash = hasher.hash(req.password)
+    db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+    # a reset is a good moment to invalidate any sessions from before the
+    # password change (e.g. a session an attacker held onto) - current_user()
+    # checks the Redis-cached session first, so the DB row alone isn't enough
+    old_sessions = db.execute(
+        select(UserSession).where(UserSession.user_id == user.id)
+    ).scalars().all()
+    for s in old_sessions:
+        delete_session(s.token)
+    db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+    db.commit()
     return {"ok": True}
 
 
