@@ -68,7 +68,7 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
       <div className="relative">
         {menu}
         <Link to={`/story/${card.id}`} className={`${shell} gap-2`}>
-          <Thumb src={card.image_url} dead={isDead} className="h-[120px] w-full shrink-0 object-cover" />
+          <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[120px] w-full shrink-0 object-cover" />
           <div className="flex flex-col gap-1.5 p-3.5">
             <MetaLine s={card} />
             <h2 style={{ ...serif, fontSize: 18, fontWeight: 600, lineHeight: 1.25, color: isDead ? "var(--status-dead)" : "var(--ink)" }}>
@@ -88,7 +88,7 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
     <div className="relative">
       {menu}
       <Link to={`/story/${card.id}`} className={`${shell} gap-2.5`}>
-        <Thumb src={card.image_url} dead={isDead} className="h-[180px] w-full shrink-0 object-cover" />
+        <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[180px] w-full shrink-0 object-cover" />
         <div className="flex flex-col gap-2 p-4">
           <div className="flex items-center gap-2">
             {card.category && (

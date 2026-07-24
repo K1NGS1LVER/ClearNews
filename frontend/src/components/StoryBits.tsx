@@ -78,7 +78,17 @@ function LeanBarComponent({ left, center, right }: { left: number | null; center
   );
 }
 
-function ThumbComponent({ src, dead, className }: { src: string | null; dead?: boolean; className?: string }) {
+function ThumbComponent({
+  src,
+  title,
+  dead,
+  className,
+}: {
+  src: string | null;
+  title: string;
+  dead?: boolean;
+  className?: string;
+}) {
   const [broken, setBroken] = useState(false);
   const cls = className ?? "h-[110px] w-full shrink-0 object-cover sm:ml-5 sm:my-3.5 sm:h-[66px] sm:w-24 sm:rounded-md";
   if (src && !broken) {
@@ -94,29 +104,21 @@ function ThumbComponent({ src, dead, className }: { src: string | null; dead?: b
       />
     );
   }
+  // No real image and no stock-photo fallback configured (PEXELS_API_KEY is
+  // optional - self-hosters shouldn't need a second API key just to get a
+  // decent-looking card). A shaded card with the headline reads better than
+  // an empty box or a generic "no image" icon, and needs zero extra config.
   return (
     <div
-      className={`${cls} flex items-center justify-center`}
+      className={`${cls} flex items-center p-3`}
       style={{ opacity: dead ? 0.6 : 1, background: "var(--thumb-a)" }}
-      role="img"
-      aria-label="No image available"
     >
-      <svg
-        width="30%"
-        height="30%"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--ink-muted)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ minWidth: 18, minHeight: 18, maxWidth: 32, maxHeight: 32 }}
+      <span
+        className="line-clamp-3"
+        style={{ fontFamily: "var(--font-serif)", fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: "var(--ink-2)" }}
       >
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <circle cx="8.5" cy="9.5" r="1.5" />
-        <path d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L6 17" />
-        <line x1="3" y1="3" x2="21" y2="21" />
-      </svg>
+        {title}
+      </span>
     </div>
   );
 }

@@ -38,6 +38,7 @@ from app.ratelimit import (
     rate_limit_voice_transcribe,
 )  # protect LLM/voice endpoints from quota abuse
 from app.retrieval import hybrid_search
+from app.stock_images import pick_stock_image
 
 # Several-second voice clip: generous headroom while still bounding the
 # per-request temp file / memory use.
@@ -292,9 +293,11 @@ def list_stories(
     status: str | None = None,
     source_country: str | None = None,
     about_country: str | None = None,
+    limit: int = 60,
+    offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    q = select(Story.id, Story.title, Story.status, Story.first_seen, Story.last_seen)
+    q = select(Story.id, Story.title, Story.status, Story.first_seen, Story.last_seen, Story.category)
     if status:
         q = q.where(Story.status == status)
     if source_country:
@@ -324,11 +327,15 @@ def list_stories(
                 bias_center_share=m["bias_center_share"],
                 bias_right_share=m["bias_right_share"],
                 daily_counts=m["daily_counts"],
-                image_url=images.get(s.id),
+                image_url=images.get(s.id) or pick_stock_image(s.id, s.category),
             )
         )
     cards.sort(key=lambda c: c.article_count, reverse=True)
-    return cards
+    # ponytail: paginating the already-sorted list, not the SQL query - the
+    # metrics bulk-fetch above still runs for the full matched set. Fine at
+    # today's story counts; move the sort/limit into SQL if this endpoint
+    # becomes a bottleneck.
+    return cards[offset : offset + limit]
 
 
 class ForYouCard(StoryCard):
@@ -465,7 +472,7 @@ def for_you(
             bias_center_share=m["bias_center_share"],
             bias_right_share=m["bias_right_share"],
             daily_counts=m["daily_counts"],
-            image_url=images.get(s.id),
+            image_url=images.get(s.id) or pick_stock_image(s.id, s.category),
         )
         # kept current by pipeline/metrics.py; falls back to just the title
         # until the next metrics run if a story predates that column
@@ -506,10 +513,15 @@ def for_you(
         if favourite_hits:
             best_favourite_id = max(favourite_hits, key=lambda t: t[0])[2].id
 
-    for score, matched, s, card in blended:
-        if s.id == best_favourite_id or score >= 3.5:
+    # rank-based, not absolute-score-based: score_story's max achievable score
+    # for a user with no favourite_category is ~3.25, below the old >=3.5 hero
+    # cutoff, so every cold/new user's grid rendered as a single flat tier.
+    # blended is already score-sorted (top, then outside), so position is a
+    # reliable proxy and always yields real hero/standard/compact variety.
+    for idx, (score, matched, s, card) in enumerate(blended):
+        if s.id == best_favourite_id or idx < 3:
             size = "hero"
-        elif score >= 1.5:
+        elif idx < 10:
             size = "standard"
         else:
             size = "compact"

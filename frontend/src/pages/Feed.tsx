@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { decodeEntities, fetchCountries, fetchStories } from "../api";
@@ -8,23 +8,39 @@ import { LeanBar, MetaLine, Thumb } from "../components/StoryBits";
 import FilterBar, { CountryEmptyState } from "../components/FilterBar";
 import { DEFAULT_FILTERS, type Filters } from "../lib/filters";
 
+const PAGE_SIZE = 60;
+
 export default function Feed() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const { data: countries } = useQuery({ queryKey: ["countries"], queryFn: fetchCountries });
-  const { data: stories, isLoading, error } = useQuery({
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["stories", filters],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       fetchStories({
         status: filters.status ?? undefined,
         source_country: filters.mode === "source" ? (filters.country ?? undefined) : undefined,
         about_country: filters.mode === "about" ? (filters.country ?? undefined) : undefined,
+        limit: PAGE_SIZE,
+        offset: pageParam,
       }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === PAGE_SIZE ? allPages.flat().length : undefined,
   });
+
+  const stories = data?.pages.flat() ?? [];
 
   if (isLoading) return <Loading label="Loading stories…" />;
   if (error) return <p className="p-8 text-red-700">Failed to load stories.</p>;
 
-  const liveCount = stories?.filter((s) => s.status !== "dead").length ?? 0;
+  const liveCount = stories.filter((s) => s.status !== "dead").length;
   const selectedCountry = countries?.find((c) => c.code === filters.country);
   const showEmptyState =
     filters.country &&
@@ -53,11 +69,11 @@ export default function Feed() {
               to={`/story/${s.id}`}
               className="flex flex-col overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface-1)] shadow-[0_1px_3px_var(--card-shadow)] transition-colors hover:bg-black/[0.02] sm:flex-row sm:items-center sm:gap-[18px] sm:rounded-none sm:border-0 sm:border-t sm:border-t-[color:var(--rowline)] sm:bg-transparent sm:shadow-none sm:first:border-t-0"
             >
-              <Thumb src={s.image_url} dead={s.status === "dead"} />
+              <Thumb src={s.image_url} title={decodeEntities(s.title)} dead={s.status === "dead"} />
               <div className="min-w-0 flex-1 flex flex-col gap-1.5 p-3.5 sm:p-0 sm:py-3.5 sm:pr-5">
                 <MetaLine s={s} />
                 <h2
-                  className="truncate"
+                  className="line-clamp-2"
                   style={{
                     fontFamily: "var(--font-serif)",
                     fontSize: 18,
@@ -78,6 +94,18 @@ export default function Feed() {
             </Link>
           ))}
         </div>
+      )}
+
+      {hasNextPage && !showEmptyState && (
+        <button
+          type="button"
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="mt-4 w-full cursor-pointer rounded-lg py-2.5 text-sm disabled:cursor-default disabled:opacity-60"
+          style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink-2)" }}
+        >
+          {isFetchingNextPage ? "Loading…" : "Load more"}
+        </button>
       )}
     </div>
   );
