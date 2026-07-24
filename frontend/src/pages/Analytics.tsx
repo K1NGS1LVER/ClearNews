@@ -86,8 +86,8 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.by_category}>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="category" stroke="var(--baseline)" fontSize={11} tickLine={false} />
-                <YAxis allowDecimals={false} stroke="var(--baseline)" fontSize={11} tickLine={false} width={28} />
+                <XAxis dataKey="category" stroke="var(--baseline)" fontSize={11} tickLine={false} tick={{ fill: "var(--ink-muted)" }} />
+                <YAxis allowDecimals={false} stroke="var(--baseline)" fontSize={11} tickLine={false} width={28} tick={{ fill: "var(--ink-muted)" }} />
                 <Tooltip
                   contentStyle={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}
                   cursor={{ fill: "var(--grid)" }}
@@ -108,7 +108,12 @@ export default function Analytics() {
                     >
                       {Math.round(s.death_risk * 100)}%
                     </span>
-                    <Link to={`/story/${s.story_id}`} className="min-w-0 flex-1 truncate text-[13px] hover:underline" style={{ color: "var(--ink)" }}>
+                    <Link
+                      to={`/story/${s.story_id}`}
+                      title={decodeEntities(s.title)}
+                      className="min-w-0 flex-1 truncate text-[13px] hover:underline"
+                      style={{ color: "var(--ink)" }}
+                    >
                       {decodeEntities(s.title)}
                     </Link>
                   </li>

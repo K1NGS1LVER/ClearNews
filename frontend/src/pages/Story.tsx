@@ -28,7 +28,7 @@ const serif = { fontFamily: "var(--font-serif)" } as const;
 
 const COVERAGE_PAGE_SIZE = 15;
 
-const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false } as const;
+const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false, tick: { fill: "var(--ink-muted)" } } as const;
 const grid = <CartesianGrid stroke="var(--grid)" vertical={false} />;
 const tooltipStyle = {
   background: "var(--surface-1)",
@@ -106,7 +106,7 @@ export default function Story() {
     <StoryAsk storyId={id} articleCount={arc.articles.length}>
       <div className="mx-auto max-w-4xl px-4 pb-8 pt-2 sm:px-8">
         <div className="mb-4 flex flex-col gap-2.5">
-          <Link to="/" style={{ ...mono, fontSize: 11, color: "var(--ink-muted)" }}>
+          <Link to="/stories" style={{ ...mono, fontSize: 11, color: "var(--ink-muted)" }}>
             ← ALL STORIES
           </Link>
           <h1 style={{ ...serif, fontSize: 26, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.01em", color: "var(--ink)" }}>

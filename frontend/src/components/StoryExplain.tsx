@@ -19,7 +19,7 @@ const serif = { fontFamily: "var(--font-serif)" } as const;
 const BIAS_ORDER: BiasLabel[] = ["left", "center", "right"];
 const classVar = (l: BiasLabel) => `var(--bias-${l})`;
 
-const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false } as const;
+const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false, tick: { fill: "var(--ink-muted)" } } as const;
 const tooltipStyle = {
   background: "var(--surface-1)",
   border: "1px solid var(--border)",

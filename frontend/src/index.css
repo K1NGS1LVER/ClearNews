@@ -10,7 +10,7 @@
   --page: #f7f6f2;
   --ink: #141310;
   --ink-2: #52514e;
-  --ink-muted: #8b887f;
+  --ink-muted: #68655e;
   --grid: #ecebe4;
   --baseline: #b3b0a3;
   --border: rgba(11, 11, 11, 0.1);
@@ -30,7 +30,7 @@
 
   --status-active: #0a7a0a;
   --status-fading: #a87700;
-  --status-dead: #a5a297;
+  --status-dead: #8f8c81;
 
   --navpill: #141310;
   --navpill-ink: #fcfcfb;
