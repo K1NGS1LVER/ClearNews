@@ -115,13 +115,19 @@ async function send<T>(method: "POST" | "PUT", path: string, body?: unknown): Pr
   return resp.json();
 }
 
-function qs(params: Record<string, string | undefined>): string {
-  const entries = Object.entries(params).filter(([, v]) => v);
+function qs(params: Record<string, string | number | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
   if (!entries.length) return "";
-  return "?" + new URLSearchParams(entries as [string, string][]).toString();
+  return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
 }
 
-export type StoryFilters = { status?: string; source_country?: string; about_country?: string };
+export type StoryFilters = {
+  status?: string;
+  source_country?: string;
+  about_country?: string;
+  limit?: number;
+  offset?: number;
+};
 
 export const fetchStories = (filters: StoryFilters = {}) =>
   get<StoryCard[]>("/stories" + qs(filters));
@@ -188,6 +194,12 @@ export const login = (email: string, password: string) =>
   send<Me>("POST", "/auth/login", { email, password });
 
 export const logout = () => send<{ ok: boolean }>("POST", "/auth/logout");
+
+export const forgotPassword = (email: string) =>
+  send<{ ok: boolean }>("POST", "/auth/forgot-password", { email });
+
+export const resetPassword = (token: string, password: string) =>
+  send<{ ok: boolean }>("POST", "/auth/reset-password", { token, password });
 
 export const putPreferences = (prefs: {
   display_name?: string;
