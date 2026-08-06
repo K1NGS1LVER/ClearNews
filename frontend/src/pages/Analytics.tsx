@@ -120,7 +120,7 @@ export default function Analytics() {
                 ))}
               </ul>
               <span className="mt-1 block" style={{ ...mono, fontSize: "9.5px", color: "var(--ink-muted)" }}>
-                MODEL SCORE · P(NO COVERAGE IN NEXT 48H)
+                XGBOOST MODEL · P(STORY FADES WITHIN 30 DAYS)
               </span>
             </Panel>
           )}
