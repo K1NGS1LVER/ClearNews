@@ -58,7 +58,7 @@ def test_runaway_tool_loop_terminates_with_error(monkeypatch):
                 yield
             raise GraphRecursionError("Recursion limit reached")
 
-    monkeypatch.setattr(chat_mod, "build_agent", lambda _sid: LoopingAgent())
+    monkeypatch.setattr(chat_mod, "build_agent", lambda *args, **kwargs: LoopingAgent())
 
     async def collect():
         return [ev async for ev in stream_chat([{"role": "user", "content": "x"}], None)]
@@ -79,7 +79,7 @@ def test_empty_completion_yields_error(monkeypatch):
     async def fake_stream_once(_agent, _state):
         yield {"type": "sources", "sources": []}
 
-    monkeypatch.setattr(chat_mod, "build_agent", lambda _sid: object())
+    monkeypatch.setattr(chat_mod, "build_agent", lambda *args, **kwargs: object())
     monkeypatch.setattr(chat_mod, "_stream_once", fake_stream_once)
 
     async def collect():
@@ -98,7 +98,7 @@ def test_answer_does_not_trigger_fallback(monkeypatch):
         yield {"type": "token", "content": "Here is the answer."}
         yield {"type": "sources", "sources": []}
 
-    monkeypatch.setattr(chat_mod, "build_agent", lambda _sid: object())
+    monkeypatch.setattr(chat_mod, "build_agent", lambda *args, **kwargs: object())
     monkeypatch.setattr(chat_mod, "_stream_once", fake_stream_once)
 
     async def collect():
@@ -119,7 +119,7 @@ def test_recursion_error_after_tokens_says_cut_short(monkeypatch):
         yield {"type": "token", "content": "Partial answer"}
         raise GraphRecursionError("Recursion limit reached")
 
-    monkeypatch.setattr(chat_mod, "build_agent", lambda _sid: object())
+    monkeypatch.setattr(chat_mod, "build_agent", lambda *args, **kwargs: object())
     monkeypatch.setattr(chat_mod, "_stream_once", fake_stream_once)
 
     async def collect():

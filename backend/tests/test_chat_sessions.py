@@ -30,7 +30,7 @@ def _cleanup(*emails: str) -> None:
 def test_chat_session_owner_boundary_and_stream_persistence(monkeypatch):
     import agent.chat as chat
 
-    async def fake_stream(_messages, _story_id):
+    async def fake_stream(*_args, **_kwargs):
         yield {"type": "token", "content": "A grounded answer [web:1]."}
         yield {"type": "sources", "sources": [{
             "citation_id": "web:1", "source_type": "web", "url": "https://example.test",
