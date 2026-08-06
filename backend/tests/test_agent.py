@@ -138,9 +138,18 @@ def test_collect_sources_dedupes():
         ToolMessage(content=json.dumps([src, src]), tool_call_id="a"),
         ToolMessage(content=json.dumps([{**src, "article_id": 2}]), tool_call_id="b"),
         ToolMessage(content="not json", tool_call_id="c"),
+        ToolMessage(content="No matching archive articles found for query: 'xyz'.", tool_call_id="d"),
     ]
     sources = _collect_sources(msgs)
     assert sorted(s["article_id"] for s in sources) == [1, 2]
+
+
+@pytest.mark.dev_db
+def test_search_corpus_empty_returns_fallback_string(monkeypatch):
+    import agent.tools as tools_mod
+    monkeypatch.setattr(tools_mod, "hybrid_search", lambda session, query, story_id=None, limit=5: [])
+    result = search_corpus.invoke({"query": "nonexistent_query_12345"})
+    assert result == "No matching archive articles found for query: 'nonexistent_query_12345'."
 
 
 def test_stream_once_filters_tool_calls_and_raw_json():

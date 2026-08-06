@@ -58,7 +58,7 @@ def test_searxng_json_format_disabled_returns_no_results(monkeypatch):
     monkeypatch.setenv("WEB_SEARCH_PROVIDER", "searxng")
     monkeypatch.setattr(tools_mod.httpx, "get", lambda *a, **k: _Response({}, status_code=403))
 
-    assert web_search.invoke({"query": "tariffs"}) == []
+    assert web_search.invoke({"query": "tariffs"}) == "No live web results found for query: 'tariffs'."
 
 
 def test_searxng_unreachable_returns_no_results(monkeypatch):
@@ -69,7 +69,7 @@ def test_searxng_unreachable_returns_no_results(monkeypatch):
 
     monkeypatch.setattr(tools_mod.httpx, "get", fake_get)
 
-    assert web_search.invoke({"query": "tariffs"}) == []
+    assert web_search.invoke({"query": "tariffs"}) == "No live web results found for query: 'tariffs'."
 
 
 def test_tavily_provider_parses_results(monkeypatch):
@@ -125,4 +125,4 @@ def test_hosted_provider_without_key_returns_no_results(monkeypatch, provider):
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
 
-    assert web_search.invoke({"query": "tariffs"}) == []
+    assert web_search.invoke({"query": "tariffs"}) == "No live web results found for query: 'tariffs'."

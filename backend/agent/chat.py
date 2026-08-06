@@ -101,10 +101,17 @@ def _collect_sources(messages) -> list[dict]:
     for msg in messages:
         if not isinstance(msg, ToolMessage):
             continue
-        try:
-            payload = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
-        except (json.JSONDecodeError, TypeError):
+        content = getattr(msg, "content", None)
+        if content is None:
             continue
+        if isinstance(content, str):
+            try:
+                payload = json.loads(content)
+            except (json.JSONDecodeError, TypeError):
+                payload = content
+        else:
+            payload = content
+
         items = payload if isinstance(payload, list) else [payload]
         for item in items:
             if not isinstance(item, dict) or "url" not in item:
