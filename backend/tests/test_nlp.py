@@ -42,14 +42,17 @@ def test_score_bias_known_leans():
         "religious liberty, and stop the radical socialist agenda."
     )
     results = score_bias([left_text, right_text])
-    assert all(label in BIAS_LABELS for label, _ in results)
-    assert all(-1 <= score <= 1 for _, score in results)
+    assert all(label in BIAS_LABELS for label, _, _ in results)
+    assert all(-1 <= score <= 1 for _, score, _ in results)
+    assert all(set(probs.keys()) == {"left", "center", "right"} for _, _, probs in results)
 
-    (left_label, left_score), (right_label, right_score) = results
+    (left_label, left_score, left_probs), (right_label, right_score, right_probs) = results
     # signed score must at least order the two correctly
     assert left_score < right_score
     assert left_label == "left"
     assert right_label == "right"
+    assert max(left_probs.values()) >= 0.33
+    assert max(right_probs.values()) >= 0.33
 
 
 def test_extract_entities():

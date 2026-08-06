@@ -77,8 +77,15 @@ def _text_of(article: Article) -> str | None:
     return article.content or article.title
 
 
-def score_bias(texts: list[str]) -> list[tuple[str, float]]:
-    """Return (label, signed_score) per text. Score: -1 left .. +1 right."""
+def score_bias(texts: list[str]) -> list[tuple[str, float, dict]]:
+    """Return (label, signed_score, probs_dict) per text.
+
+    signed_score: P(right) - P(left), range -1 (left) .. +1 (right).
+    probs_dict: {left, center, right} raw softmax probabilities, rounded to
+    4dp. max(probs_dict.values()) is the model's confidence; values below ~0.60
+    indicate the model is uncertain - treat 'center' labels especially
+    sceptically in that regime.
+    """
     tokenizer, model = _bias_pipeline()
     enc = tokenizer(
         texts, return_tensors="pt", truncation=True, max_length=512, padding=True
@@ -88,7 +95,15 @@ def score_bias(texts: list[str]) -> list[tuple[str, float]]:
     out = []
     for p in probs:
         label = BIAS_LABELS[int(p.argmax())]
-        out.append((label, float(p[2] - p[0])))  # P(right) - P(left)
+        out.append((
+            label,
+            float(p[2] - p[0]),   # P(right) - P(left), unchanged
+            {
+                "left": round(float(p[0]), 4),
+                "center": round(float(p[1]), 4),
+                "right": round(float(p[2]), 4),
+            },
+        ))
     return out
 
 
@@ -126,12 +141,13 @@ def _enrich(session: Session, todo: list[tuple[Article, str]]) -> int:
     biases = score_bias(texts)
     vader = _vader()
 
-    for (article, text), emb, (bias_label, bias_score) in zip(todo, embeddings, biases):
+    for (article, text), emb, (bias_label, bias_score, bias_probs) in zip(todo, embeddings, biases):
         doc = _spacy()(text)
         article.embedding = emb
         article.sentiment = vader.polarity_scores(text)["compound"]
         article.bias_label = bias_label
         article.bias_score = bias_score
+        article.bias_probs = bias_probs
         article.entities = _entities_from_doc(doc)
         if not article.mentioned_countries:
             # GKG's V2Locations already populated this for firehose-sourced

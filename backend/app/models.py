@@ -88,6 +88,7 @@ class Article(Base):
     sentiment: Mapped[float | None] = mapped_column(Float)  # -1 .. +1
     bias_label: Mapped[str | None] = mapped_column(String(8))  # left | center | right
     bias_score: Mapped[float | None] = mapped_column(Float)  # -1 (left) .. +1 (right)
+    bias_probs: Mapped[dict | None] = mapped_column(JSONB)   # {left, center, right} softmax probs; max() = confidence
     bias_explanation: Mapped[dict | None] = mapped_column(JSONB)  # SHAP payload, see pipeline/explain.py
     entities: Mapped[dict | None] = mapped_column(JSONB)  # spaCy NER output
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
