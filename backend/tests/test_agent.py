@@ -141,3 +141,32 @@ def test_collect_sources_dedupes():
     ]
     sources = _collect_sources(msgs)
     assert sorted(s["article_id"] for s in sources) == [1, 2]
+
+
+def test_stream_once_filters_tool_calls_and_raw_json():
+    from langchain_core.messages import AIMessageChunk
+
+    class MockAgent:
+        async def astream(self, *args, **kwargs):
+            # Normal text chunk
+            yield AIMessageChunk(content="Here is "), None
+            # Chunk with tool_calls
+            yield AIMessageChunk(content="", tool_calls=[{"name": "search", "args": {}, "id": "call_1"}]), None
+            # Pseudo tool call text starting with {"tool":
+            yield AIMessageChunk(content='{"tool": "search_corpus"}'), None
+            # Pseudo tool call text starting with ```json
+            yield AIMessageChunk(content='```json\n{"name": "test"}\n```'), None
+            # Pseudo tool call text starting with <tool_call
+            yield AIMessageChunk(content='<tool_call>search</tool_call>'), None
+            # Normal text chunk
+            yield AIMessageChunk(content="the answer."), None
+
+    async def collect():
+        events = []
+        async for ev in chat_mod._stream_once(MockAgent(), {}):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(collect())
+    tokens = [e["content"] for e in events if e["type"] == "token"]
+    assert tokens == ["Here is ", "the answer."]

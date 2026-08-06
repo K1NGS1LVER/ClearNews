@@ -17,7 +17,7 @@ from langgraph.prebuilt import create_react_agent
 
 from agent.tools import get_story_arc, list_stories, make_search_story, search_corpus, web_search
 
-MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 SUGGEST_MODEL = os.getenv("SUGGEST_MODEL", "llama-3.1-8b-instant")
 
 # Cap the ReAct tool loop. When retrieval turns up nothing on-topic, the model
@@ -54,7 +54,8 @@ Rules:
   English, no jargon, no bullet lists. The UI renders raw text; skip
   markdown headings and bold syntax.
 - Be concise but warm. One paragraph per main point. Answer after at
-  most 2 rounds of tool calls."""
+  most 2 rounds of tool calls.
+- NEVER output raw JSON, code blocks, or tool call structures in your visible response. Call tools natively through the function-calling API. Never write '{"tool": ...}' as text."""
 
 
 @lru_cache(maxsize=1)
@@ -121,7 +122,15 @@ async def _stream_once(agent, state):
         state, {"recursion_limit": RECURSION_LIMIT}, stream_mode="messages"
     ):
         if isinstance(msg, AIMessageChunk) and msg.content:
-            yield {"type": "token", "content": msg.content}
+            has_tool_calls = bool(
+                getattr(msg, "tool_calls", None) or getattr(msg, "tool_call_chunks", None)
+            )
+            content_str = msg.content if isinstance(msg.content, str) else str(msg.content)
+            starts_with_tool = content_str.lstrip().startswith(
+                ('{"tool":', '{"name":', "```json", "<tool_call")
+            )
+            if not has_tool_calls and not starts_with_tool:
+                yield {"type": "token", "content": msg.content}
         elif isinstance(msg, ToolMessage):
             tool_messages.append(msg)
 

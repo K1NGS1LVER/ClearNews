@@ -22,15 +22,26 @@ const TTS_SAMPLE_RATE = 24000;
     stream itself ends (done in ChatPanel.tsx after its SSE loop exits). */
 export function extractCompleteSentences(pending: string): { sentences: string[]; rest: string } {
   const sentences: string[] = [];
-  const boundary = /[.!?](?=\s)/g;
+  const boundary = /[.!?](?=\s)|[,;:—](?=\s)/g;
   let consumed = 0;
   let match: RegExpExecArray | null;
+
   while ((match = boundary.exec(pending))) {
     const end = match.index + 1; // up to and including the punctuation
-    const sentence = pending.slice(consumed, end).trim();
-    if (sentence) sentences.push(sentence);
-    consumed = end;
+    const candidate = pending.slice(consumed, end).trim();
+    const isTerminal = /[.!?]/.test(match[0]);
+
+    if (isTerminal || candidate.length >= 45) {
+      const clean = candidate
+        .replace(/\[(?:web:)?\d+\]/g, "")
+        .replace(/\s+([.!?,;:—])/g, "$1")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (clean) sentences.push(clean);
+      consumed = end;
+    }
   }
+
   return { sentences, rest: pending.slice(consumed) };
 }
 
@@ -64,7 +75,11 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
 
   function enqueue(sentence: string) {
     if (stopped) return;
-    const text = sentence.trim();
+    const text = sentence
+      .replace(/\[(?:web:)?\d+\]/g, "")
+      .replace(/\s+([.!?,;:—])/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
     if (!text) return;
 
     const audioPromise = fetch("/api/voice/speak", {

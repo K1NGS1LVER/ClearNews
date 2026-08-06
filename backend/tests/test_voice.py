@@ -72,7 +72,11 @@ class _FakeInfo:
 class _FakeWhisperModel:
     """Stands in for faster_whisper.WhisperModel."""
 
-    def transcribe(self, _audio_path, beam_size=5):
+    def __init__(self):
+        self.last_transcribe_kwargs = {}
+
+    def transcribe(self, _audio_path, beam_size=5, **kwargs):
+        self.last_transcribe_kwargs = {"beam_size": beam_size, **kwargs}
         return [_FakeSegment("hello "), _FakeSegment("world")], _FakeInfo()
 
 
@@ -122,14 +126,35 @@ def test_is_available_false_when_load_failed(monkeypatch):
 
 
 def test_transcribe_returns_transcript_language_duration(monkeypatch):
-    monkeypatch.setattr(voice_mod, "_model", _FakeWhisperModel())
+    fake_model = _FakeWhisperModel()
+    monkeypatch.setattr(voice_mod, "_model", fake_model)
     result = voice_mod.transcribe("irrelevant/path.wav")
     assert result == {"transcript": "hello world", "language": "en", "duration": 1.23}
+    assert (
+        fake_model.last_transcribe_kwargs.get("initial_prompt")
+        == "ClearNews analysis of news stories, politics, conflict, and current events."
+    )
 
 
 def test_transcribe_returns_none_when_model_unavailable(monkeypatch):
     monkeypatch.setattr(voice_mod, "_load_failed", True)
     assert voice_mod.transcribe("irrelevant/path.wav") is None
+
+
+def test_sanitize_strips_citations_urls_and_markdown():
+    raw = (
+        "Check [123] and [web:1] at https://example.com/news "
+        "with *bold* _italic_ #heading `code` syntax."
+    )
+    sanitized = voice_mod._sanitize(raw)
+    assert "[123]" not in sanitized
+    assert "[web:1]" not in sanitized
+    assert "https://example.com/news" not in sanitized
+    assert "*" not in sanitized
+    assert "_" not in sanitized
+    assert "#" not in sanitized
+    assert "`" not in sanitized
+    assert sanitized == "Check and at with bold italic heading code syntax."
 
 
 # ---------------------------------------------------------------------------

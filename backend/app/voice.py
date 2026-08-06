@@ -87,7 +87,11 @@ def transcribe(audio_path: str) -> dict | None:
     if model is None:
         return None
 
-    segments, info = model.transcribe(audio_path, beam_size=5)
+    segments, info = model.transcribe(
+        audio_path,
+        beam_size=5,
+        initial_prompt="ClearNews analysis of news stories, politics, conflict, and current events.",
+    )
     # segments is a generator; materialize it to pull the full transcript.
     text = "".join(segment.text for segment in segments).strip()
     return {
@@ -154,6 +158,9 @@ def _sanitize(text: str) -> str:
         return ""
     text = unicodedata.normalize("NFKC", text)
     text = "".join(ch for ch in text if ch == "\n" or unicodedata.category(ch)[0] != "C")
+    text = re.sub(r"\[(?:web:)?\d+\]", "", text)
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"[\*_#`]", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
