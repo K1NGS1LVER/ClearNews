@@ -179,3 +179,12 @@ def test_stream_once_filters_tool_calls_and_raw_json():
     events = asyncio.run(collect())
     tokens = [e["content"] for e in events if e["type"] == "token"]
     assert tokens == ["Here is ", "the answer."]
+
+
+def test_create_llm_ollama():
+    from langchain_openai import ChatOpenAI
+    llm = chat_mod._create_llm("ollama")
+    assert isinstance(llm, ChatOpenAI)
+    assert llm.openai_api_base == chat_mod.OLLAMA_BASE_URL
+    assert llm.model_name == chat_mod.OLLAMA_MODEL
+

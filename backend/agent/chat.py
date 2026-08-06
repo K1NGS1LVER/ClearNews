@@ -19,6 +19,10 @@ from agent.tools import get_story_arc, list_stories, make_search_story, search_c
 
 MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 SUGGEST_MODEL = os.getenv("SUGGEST_MODEL", "llama-3.1-8b-instant")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").lower()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
 
 # Cap the ReAct tool loop. When retrieval turns up nothing on-topic, the model
 # keeps re-searching instead of answering; without a cap it runs to LangGraph's
@@ -58,11 +62,46 @@ Rules:
 - NEVER output raw JSON, code blocks, or tool call structures in your visible response. Call tools natively through the function-calling API. Never write '{"tool": ...}' as text."""
 
 
+@lru_cache(maxsize=4)
+def _create_llm(provider: str | None = None):
+    prov = (provider or LLM_PROVIDER).lower()
+    if prov == "ollama":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=OLLAMA_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            api_key="ollama",
+            temperature=0.2,
+        )
+    elif prov == "openrouter":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=OPENROUTER_MODEL,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            temperature=0.2,
+        )
+    elif prov == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            api_key=os.environ["OPENAI_API_KEY"],
+            temperature=0.2,
+        )
+    elif prov == "groq":
+        from langchain_groq import ChatGroq
+
+        return ChatGroq(model=MODEL, temperature=0.2)
+    else:
+        raise ValueError(f"Unsupported LLM provider: {prov}")
+
+
 @lru_cache(maxsize=1)
 def _llm():
-    from langchain_groq import ChatGroq
-
-    return ChatGroq(model=MODEL, temperature=0.2, reasoning_effort="low")
+    return _create_llm("groq")
 
 
 @lru_cache(maxsize=1)
@@ -72,7 +111,11 @@ def _suggest_llm():
     return ChatGroq(model=SUGGEST_MODEL, temperature=0.2)
 
 
-def build_agent(story_id: int | None, user_context: str | None = None):
+def build_agent(
+    story_id: int | None,
+    user_context: str | None = None,
+    provider: str | None = None,
+):
     user_suffix = f"\n\n{user_context}" if user_context else ""
     if story_id is not None:
         tools = [make_search_story(story_id), get_story_arc, web_search]
@@ -92,7 +135,7 @@ def build_agent(story_id: int | None, user_context: str | None = None):
             "(a story's coverage lifecycle), and web_search for live reporting."
             + user_suffix
         )
-    return create_react_agent(_llm(), tools, prompt=prompt)
+    return create_react_agent(_create_llm(provider), tools, prompt=prompt)
 
 
 def _collect_sources(messages) -> list[dict]:
@@ -149,6 +192,7 @@ async def stream_chat(
     story_id: int | None,
     retries: int = 1,
     user_context: str | None = None,
+    provider: str | None = None,
 ):
     """Yield SSE-ready events: token deltas, then citations.
 
@@ -166,7 +210,8 @@ async def stream_chat(
     from groq import APIError
     from langgraph.errors import GraphRecursionError
 
-    agent = build_agent(story_id, user_context=user_context)
+    current_provider = (provider or LLM_PROVIDER).lower()
+    agent = build_agent(story_id, user_context=user_context, provider=current_provider)
     state = {"messages": [(m["role"], m["content"]) for m in messages]}
 
     for attempt in range(retries + 1):
@@ -191,6 +236,19 @@ async def stream_chat(
             yield {"type": "error", "message": message}
             return
         except APIError as exc:
+            if current_provider == "groq" and not emitted:
+                print(f"chat agent Groq APIError (attempt {attempt + 1}): {exc}. Falling back to Ollama...")
+                try:
+                    fallback_agent = build_agent(story_id, user_context=user_context, provider="ollama")
+                    async for event in _stream_once(fallback_agent, state):
+                        emitted = emitted or event["type"] == "token"
+                        yield event
+                    if not emitted:
+                        yield {"type": "error", "message": NO_COVERAGE_MESSAGE}
+                    return
+                except Exception as fallback_exc:
+                    print(f"Ollama fallback failed: {fallback_exc}")
+
             if emitted or attempt == retries:
                 exc_str = str(exc)
                 if "rate_limit" in exc_str or "too large" in exc_str.lower():
