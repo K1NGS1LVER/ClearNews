@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { decodeEntities, type ArticleOut } from "../api";
+import BiasChip from "../components/BiasChip";
 import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
 
@@ -13,10 +14,6 @@ type ArticleDetail = ArticleOut & {
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
 
-const chipStyle = (label: string | null) => ({
-  background: label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)",
-  color: label === "center" || !label ? "var(--chip-center-ink)" : "#fff",
-});
 
 export default function Article() {
   const id = Number(useParams().id);
@@ -50,9 +47,7 @@ export default function Article() {
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2.5" style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.05em", color: "var(--ink-muted)" }}>
             {a.bias_label && (
-              <span className="w-[52px] rounded py-0.5 text-center text-[9px] font-semibold uppercase" style={{ letterSpacing: "0.08em", ...chipStyle(a.bias_label) }}>
-                {a.bias_label}
-              </span>
+              <BiasChip label={a.bias_label} confidence={a.bias_confidence} />
             )}
             <span>{a.outlet.toUpperCase()}</span>
             <span>·</span>

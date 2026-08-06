@@ -15,13 +15,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { decodeEntities, fetchArc, fetchOutlets } from "../api";
+import { decodeEntities, fetchArc, fetchOutlets, summariseStory } from "../api";
 import BiasBar from "../components/BiasBar";
 import BiasChip from "../components/BiasChip";
+import BiasConfidenceNote from "../components/BiasConfidenceNote";
 import DriftMap from "../components/DriftMap";
 import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
 import StoryExplain from "../components/StoryExplain";
+import { classifyStoryShape, PATTERN_STYLE } from "../lib/storyShape";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -37,7 +39,7 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-function Panel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Panel({ title, hint, children }: { title: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section
       className="rounded-[10px] border p-[18px_22px] sm:p-5"
@@ -46,11 +48,68 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h3 style={{ ...serif, fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>{title}</h3>
         {hint && (
-          <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>{hint}</span>
+          typeof hint === "string" ? (
+            <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>{hint}</span>
+          ) : (
+            hint
+          )
         )}
       </div>
       {children}
     </section>
+  );
+}
+
+function DeathRiskBadge({ risk }: { risk: number | null }) {
+  if (risk === null) return (
+    <span style={{ ...mono, fontSize: 9.5, color: "var(--ink-muted)" }}>
+      FADE RISK: MODEL NOT TRAINED YET
+    </span>
+  );
+  const pct = Math.round(risk * 100);
+  const color = risk > 0.7 ? "var(--bias-right)" : risk > 0.4 ? "var(--status-fading)" : "var(--status-active)";
+  return (
+    <span
+      style={{ ...mono, fontSize: 9.5, color }}
+      title="Probability this story loses all coverage within 30 days (XGBoost model, trained on stories ≥30 days old)"
+    >
+      {pct}% FADE RISK — 30D
+    </span>
+  );
+}
+
+function StorySummary({ storyId, initial }: { storyId: number; initial: string | null }) {
+  const [summary, setSummary] = useState(initial);
+  const [loading, setLoading] = useState(false);
+
+  async function generate() {
+    setLoading(true);
+    try {
+      const res = await summariseStory(storyId);
+      setSummary(res.summary);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Panel title="Summary">
+      {summary ? (
+        <p style={{ ...serif, fontSize: 15, lineHeight: 1.7, color: "var(--ink-2)" }}>
+          {summary}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={generate}
+          disabled={loading}
+          className="rounded px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          style={{ background: "var(--ink)", color: "var(--surface-1)" }}
+        >
+          {loading ? "Generating…" : "Generate story summary"}
+        </button>
+      )}
+    </Panel>
   );
 }
 
@@ -75,15 +134,7 @@ export default function Story() {
 
   if (!arc) return <Loading />;
 
-  // Merge real daily counts with integer forecast predictions for the volume chart.
-  // predicted_count is int - you cannot publish a fraction of an article.
-  const volumeData = [
-    ...arc.metrics.map((m) => ({ day: m.day, article_count: m.article_count })),
-    ...arc.forecast.map((f) => ({
-      day: f.day,
-      predicted_count: f.predicted_count,
-    })),
-  ];
+  const volumeData = arc.metrics.map((m) => ({ day: m.day, article_count: m.article_count }));
 
   const biasData = arc.metrics.map((m) => ({
     day: m.day,
@@ -92,15 +143,8 @@ export default function Story() {
     right: m.bias_right_share ?? 0,
   }));
 
-  const lastTwo = arc.metrics.slice(-2).map((m) => m.article_count);
-  const trend =
-    lastTwo.length === 2
-      ? lastTwo[1] > lastTwo[0]
-        ? { label: "▲ RISING", color: "var(--status-active)" }
-        : lastTwo[1] < lastTwo[0]
-          ? { label: "▼ FALLING", color: "var(--status-fading)" }
-          : { label: "— STEADY", color: "var(--ink-muted)" }
-      : null;
+  const pattern = classifyStoryShape(arc.metrics.map((m) => m.article_count));
+  const patternStyle = PATTERN_STYLE[pattern];
 
   return (
     <StoryAsk storyId={id} articleCount={arc.articles.length}>
@@ -123,12 +167,8 @@ export default function Story() {
                 <span>{outlets.length} OUTLETS</span>
               </>
             )}
-            {trend && (
-              <>
-                <span>·</span>
-                <span style={{ color: trend.color }}>{trend.label}</span>
-              </>
-            )}
+            <span>·</span>
+            <span style={{ color: patternStyle.color }}>{patternStyle.label}</span>
           </div>
           <div className="max-w-[520px]">
             <BiasBar
@@ -137,10 +177,15 @@ export default function Story() {
               right={average(arc.metrics.map((m) => m.bias_right_share))}
               showLabels
             />
+            <BiasConfidenceNote
+              centerShare={average(arc.metrics.map((m) => m.bias_center_share))}
+            />
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
+          <StorySummary storyId={id} initial={arc.summary} />
+
           <Panel title={`The coverage — ${arc.articles.length} articles`} hint="NEWEST FIRST">
             <ul className="flex flex-col">
               {(coverageExpanded ? arc.articles : arc.articles.slice(0, COVERAGE_PAGE_SIZE)).map((a, i) => (
@@ -149,7 +194,7 @@ export default function Story() {
                   className="flex items-center gap-3 py-2.5"
                   style={{ borderTop: i === 0 ? "none" : "1px solid var(--hair)" }}
                 >
-                  <BiasChip label={a.bias_label} />
+                  <BiasChip label={a.bias_label} confidence={a.bias_confidence} />
                   <Link to={`/article/${a.id}`} className="min-w-0 flex-1 truncate hover:underline" style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>
                     {a.title ? decodeEntities(a.title) : a.url}
                   </Link>
@@ -175,7 +220,7 @@ export default function Story() {
             )}
           </Panel>
 
-          <Panel title="Lifecycle — coverage volume" hint="HOLLOW BARS = FORECAST">
+          <Panel title="Lifecycle — coverage volume" hint={<DeathRiskBadge risk={arc.death_risk} />}>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={volumeData}>
                 {grid}
@@ -183,15 +228,8 @@ export default function Story() {
                 <YAxis allowDecimals={false} {...axis} width={28} />
                 <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--grid)" }} />
                 <Bar dataKey="article_count" name="Articles" fill="var(--series-volume)" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                <Bar dataKey="predicted_count" name="Forecast" fill="var(--series-volume)" fillOpacity={0.3} radius={[4, 4, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
-            {arc.forecast.length > 0 && (
-              <p className="mt-1 text-xs" style={{ color: "var(--ink-muted)" }}>
-                Lighter bars: projected volume for the next {arc.forecast.length} days
-                (log-linear trend on the past week).
-              </p>
-            )}
           </Panel>
 
           <Panel title="Framing — lean, sentiment &amp; drift">

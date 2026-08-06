@@ -220,7 +220,10 @@ function ExplanationRow({
   return (
     <li className="flex flex-col gap-2 py-2.5" style={{ borderTop: first ? "none" : "1px solid var(--hair)" }}>
       <div className="flex items-center gap-3">
-        <BiasChip label={article.bias_label} />
+        <BiasChip
+          label={article.bias_label}
+          confidence={article.probs ? Math.max(...Object.values(article.probs)) : undefined}
+        />
         <Link
           to={`/article/${article.id}`}
           className="min-w-0 flex-1 truncate hover:underline"

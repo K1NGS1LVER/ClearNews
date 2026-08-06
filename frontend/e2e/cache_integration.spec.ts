@@ -15,7 +15,7 @@ test.describe("Tier 1 — Search result caching", () => {
     await page.getByRole("button", { name: "Search" }).click({ force: true });
 
     await expect(
-      page.locator("text=MATCH").or(page.locator("text=No matches"))
+      page.locator("text=MATCH").first().or(page.locator("text=No matches"))
     ).toBeVisible({ timeout: 20_000 });
   });
 
@@ -27,11 +27,11 @@ test.describe("Tier 1 — Search result caching", () => {
 
     await input.fill("climate");
     await page.getByRole("button", { name: "Search" }).click({ force: true });
-    await expect(page.locator("text=MATCH").or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("text=MATCH").first().or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
 
     await input.fill("trade");
     await page.getByRole("button", { name: "Search" }).click({ force: true });
-    await expect(page.locator("text=MATCH").or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("text=MATCH").first().or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
   });
 });
 

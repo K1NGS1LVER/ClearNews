@@ -1,21 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { decodeEntities, fetchSearch } from "../api";
+import { decodeEntities, searchStories } from "../api";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
+const serif = { fontFamily: "var(--font-serif)" } as const;
 
 const chip = (label: string | null) => ({
   background: label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)",
   color: label === "center" || !label ? "var(--chip-center-ink)" : "#fff",
 });
 
+const statusColor: Record<string, string> = {
+  active: "var(--status-active)",
+  fading: "var(--status-fading)",
+  dead: "var(--status-dead)",
+};
+
 export default function Search() {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const { data, isFetching } = useQuery({
-    queryKey: ["search", query],
-    queryFn: () => fetchSearch(query),
+    queryKey: ["searchStories", query],
+    queryFn: () => searchStories(query),
     enabled: query.length > 0,
   });
 
@@ -55,36 +62,69 @@ export default function Search() {
 
       {data && (
         <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-          {data.length} MATCH{data.length === 1 ? "" : "ES"}
+          {data.length} STORY MATCH{data.length === 1 ? "" : "ES"}
         </span>
       )}
       {data && data.length === 0 && (
         <p className="mt-2 text-sm" style={{ color: "var(--ink-muted)" }}>No matches.</p>
       )}
-      <ul className="flex flex-col">
-        {data?.map((a, i) => (
-          <li
-            key={a.id}
-            className="flex flex-col gap-1.5 py-3.5"
-            style={{ borderTop: "1px solid var(--rowline)", marginTop: i === 0 ? 12 : 0 }}
+      <div className="mt-3 flex flex-col gap-4">
+        {data?.map((s) => (
+          <section
+            key={s.story_id}
+            className="flex flex-col gap-2.5 rounded-[10px] border p-4"
+            style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
           >
-            <Link to={`/article/${a.id}`} className="text-[14.5px] font-medium hover:underline" style={{ color: "var(--ink)" }}>
-              {a.title ? decodeEntities(a.title) : a.url}
-            </Link>
-            <div className="flex flex-wrap items-center gap-2 pl-0" style={{ ...mono, fontSize: 10, color: "var(--ink-muted)" }}>
-              <span>{a.outlet} · {a.published_at}</span>
-              {a.bias_label && (
-                <>
-                  <span>·</span>
-                  <span className="rounded px-2 py-0.5 text-[9px] font-semibold uppercase" style={{ letterSpacing: "0.08em", ...chip(a.bias_label) }}>
-                    {a.bias_label}
-                  </span>
-                </>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Link
+                to={`/story/${s.story_id}`}
+                className="text-[17px] font-semibold hover:underline"
+                style={{ ...serif, color: "var(--ink)" }}
+              >
+                {decodeEntities(s.story_title)}
+              </Link>
+              <div className="flex items-center gap-2" style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+                <span className="h-[7px] w-[7px] rounded-full" style={{ background: statusColor[s.story_status] ?? "var(--ink-muted)" }} />
+                <span style={{ color: statusColor[s.story_status] ?? "var(--ink-muted)", fontWeight: 600 }}>
+                  {s.story_status.toUpperCase()}
+                </span>
+                <span>·</span>
+                <span>{s.article_count} ARTICLES IN STORY</span>
+              </div>
             </div>
-          </li>
+
+            <div className="flex flex-col gap-2 border-t pt-2.5" style={{ borderColor: "var(--hair)" }}>
+              <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+                MATCHED ARTICLES ({s.matched_articles.length})
+              </span>
+              <ul className="flex flex-col gap-2">
+                {s.matched_articles.slice(0, 3).map((a) => (
+                  <li key={a.id} className="flex flex-col gap-1">
+                    <Link
+                      to={`/article/${a.id}`}
+                      className="text-[13.5px] font-medium hover:underline"
+                      style={{ color: "var(--ink)" }}
+                    >
+                      {a.title ? decodeEntities(a.title) : a.url}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-2" style={{ ...mono, fontSize: 10, color: "var(--ink-muted)" }}>
+                      <span>{a.outlet} · {a.published_at}</span>
+                      {a.bias_label && (
+                        <>
+                          <span>·</span>
+                          <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase" style={{ letterSpacing: "0.08em", ...chip(a.bias_label) }}>
+                            {a.bias_label}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

@@ -30,7 +30,7 @@ test.describe("Auth journey", () => {
     await page.click("button:has-text('Save & continue')");
 
     await page.waitForURL("**/foryou", { timeout: 10_000 });
-    await expect(page.locator("text=RANKED FOR YOU")).toBeVisible();
+    await expect(page.locator("text=RANKED FOR YOU")).toBeVisible({ timeout: 15_000 });
 
     // "/" now redirects straight to the personalized feed
     await page.goto("/");

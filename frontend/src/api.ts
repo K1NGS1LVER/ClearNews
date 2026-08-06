@@ -43,6 +43,11 @@ export type ArticleOut = {
   sentiment: number | null;
   bias_label: "left" | "center" | "right" | null;
   bias_score: number | null;
+  /** max(P(left), P(center), P(right)) from the bias classifier.
+   *  null means the value was not stored (pre-migration row) and a proxy
+   *  was computed from |bias_score| by the API.
+   *  Values below BIAS_CONFIDENCE_THRESHOLD should be treated as unclassified. */
+  bias_confidence: number | null;
 };
 
 export type StoryArc = {
@@ -53,6 +58,15 @@ export type StoryArc = {
   metrics: DailyMetric[];
   forecast: { day: string; predicted_count: number }[];
   articles: ArticleOut[];
+  death_risk: number | null;
+};
+
+export type StorySearchResult = {
+  story_id: number;
+  story_title: string;
+  story_status: string;
+  article_count: number;
+  matched_articles: ArticleOut[];
 };
 
 export type OutletRow = {
@@ -64,6 +78,11 @@ export type OutletRow = {
 };
 
 export type BiasLabel = "left" | "center" | "right";
+
+/** Articles with model confidence below this threshold are shown as
+ *  unclassified (? chip) rather than a colored left/center/right label.
+ *  Corresponds to max(P(left), P(center), P(right)) < 0.60. */
+export const BIAS_CONFIDENCE_THRESHOLD = 0.60;
 
 export type ExplanationArticle = {
   id: number;
@@ -136,6 +155,10 @@ export const fetchOutlets = (id: number) =>
   get<OutletRow[]>(`/stories/${id}/outlets`);
 export const fetchSearch = (q: string) =>
   get<ArticleOut[]>(`/search?q=${encodeURIComponent(q)}`);
+export const searchStories = (q: string) =>
+  get<StorySearchResult[]>(`/stories/search?q=${encodeURIComponent(q)}`);
+export const summariseStory = (id: number) =>
+  send<{ story_id: number; summary: string }>("POST", `/summarise/${id}`);
 
 export type CountryInfo = {
   code: string;

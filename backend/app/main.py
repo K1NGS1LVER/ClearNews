@@ -127,6 +127,7 @@ class ArticleOut(BaseModel):
     sentiment: float | None
     bias_label: str | None
     bias_score: float | None
+    bias_confidence: float | None  # max(P(left), P(center), P(right)); None = unknown
 
 
 class ForecastDay(BaseModel):
@@ -142,6 +143,7 @@ class StoryArc(BaseModel):
     metrics: list[DailyMetric]
     forecast: list[ForecastDay]
     articles: list[ArticleOut]
+    death_risk: float | None = None  # P(story dies within 30 days); null = model not trained yet
 
 
 class OutletRow(BaseModel):
@@ -164,6 +166,18 @@ class FeedbackRequest(BaseModel):
 
 
 def _article_out(a: Article) -> ArticleOut:
+    # Confidence: use stored probs when available (new articles), else derive
+    # a conservative proxy from |bias_score| for legacy rows.
+    # |bias_score| = |P(right) - P(left)|, so 0 ≈ model splits between L and R
+    # (or is genuinely centered), and 1 ≈ fully polarised.
+    # Proxy formula maps the 0..1 range to 0.33..0.83 — honest about the
+    # uncertainty vs. using |score| raw (which could mislead for high-center cases).
+    if a.bias_probs:
+        conf: float | None = max(a.bias_probs.values())
+    elif a.bias_score is not None:
+        conf = min(0.33 + abs(a.bias_score) * 0.5, 1.0)
+    else:
+        conf = None
     return ArticleOut(
         id=a.id,
         url=a.url,
@@ -173,6 +187,7 @@ def _article_out(a: Article) -> ArticleOut:
         sentiment=a.sentiment,
         bias_label=a.bias_label,
         bias_score=a.bias_score,
+        bias_confidence=round(conf, 3) if conf is not None else None,
     )
 
 
@@ -602,6 +617,7 @@ def story_arc(story_id: int, db: Session = Depends(get_db)):
         title=story.title,
         status=story.status,
         summary=story.summary,
+        death_risk=story.death_risk,
         metrics=[DailyMetric.model_validate(m, from_attributes=True) for m in metrics],
         forecast=forecast,
         articles=[_article_out(a) for a in articles],
@@ -803,6 +819,41 @@ def story_explanation_step(
 
     db.refresh(story)
     return _explanation_state(story)
+
+
+class StorySearchResult(BaseModel):
+    story_id: int
+    story_title: str
+    story_status: str
+    article_count: int  # total in story
+    matched_articles: list[ArticleOut]  # the ones that matched
+
+
+@app.get("/api/stories/search", response_model=list[StorySearchResult])
+def stories_search(q: str, limit: int = 10, db: Session = Depends(get_db)):
+    """Full-text + semantic search that returns story-grouped results.
+    Internally uses the same hybrid_search on articles, then groups by story_id."""
+    articles = hybrid_search(db, q, limit=min(max(limit * 3, 10), 50))
+    # Group by story, preserving relevance order (first hit per story wins)
+    seen: dict[int, StorySearchResult] = {}
+    for a in articles:
+        if a.story_id is None:
+            continue
+        if a.story_id not in seen:
+            story = db.get(Story, a.story_id)
+            if not story:
+                continue
+            n = len(story.articles)
+            seen[a.story_id] = StorySearchResult(
+                story_id=story.id,
+                story_title=story.title,
+                story_status=story.status,
+                article_count=n,
+                matched_articles=[],
+            )
+        seen[a.story_id].matched_articles.append(_article_out(a))
+    results = list(seen.values())[:limit]
+    return results
 
 
 @app.get("/api/search", response_model=list[ArticleOut])
@@ -1017,6 +1068,24 @@ def delete_chat_session(session_id: int, user: User = Depends(current_user), db:
     return {"ok": True}
 
 
+def _build_user_context(user: User) -> str | None:
+    """One-paragraph context string for the chat agent system prompt.
+    Describes the user's stated interests — not personally identifying info."""
+    parts = []
+    if user.favourite_category:
+        parts.append(f"follows {user.favourite_category} as a top interest")
+    if user.categories:
+        parts.append(f"also interested in: {', '.join(user.categories)}")
+    if user.countries:
+        parts.append(f"tracks news from: {', '.join(user.countries)}")
+    if user.keywords:
+        parts.append(f"watches keywords: {', '.join(user.keywords[:10])}")
+    if user.bias_pref and user.bias_pref != "balanced":
+        pref_desc = "wants to be challenged with opposing views" if user.bias_pref == "challenge" else "reads all coverage regardless of lean"
+        parts.append(pref_desc)
+    return f"About this reader: {'; '.join(parts)}." if parts else None
+
+
 @app.post("/api/chat", dependencies=[Depends(rate_limit_chat)])  # 20 req/min - protects Groq API quota
 async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     from agent.chat import stream_chat
@@ -1032,6 +1101,7 @@ async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session
     db.commit()
     # Build context only from this user's persisted session; client-provided
     # history cannot smuggle messages from another session into the prompt.
+    user_context = _build_user_context(user)
     history = [
         {"role": message.role, "content": message.content}
         for message in session.messages
@@ -1040,7 +1110,7 @@ async def chat(req: ChatRequest, user: User = Depends(current_user), db: Session
     async def sse():
         answer: list[str] = []
         citations: list[dict] = []
-        async for event in stream_chat(history, session.story_id):
+        async for event in stream_chat(history, session.story_id, user_context=user_context):
             if event["type"] == "token":
                 answer.append(event["content"])
             elif event["type"] == "sources":

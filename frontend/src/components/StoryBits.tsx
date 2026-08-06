@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { StoryCard } from "../api";
 import { withErrorBoundary } from "./ErrorBoundary";
+import { classifyStoryShape, PATTERN_STYLE } from "../lib/storyShape";
 
 const statusColor: Record<string, string> = {
   active: "var(--status-active)",
@@ -34,16 +35,8 @@ function MetaLineComponent({ s }: { s: StoryCard }) {
     );
   }
 
-  const counts = s.daily_counts;
-  const last = counts[counts.length - 1] ?? 0;
-  const prev = counts[counts.length - 2] ?? 0;
-  const pctChange = prev > 0 ? Math.round(((last - prev) / prev) * 100) : 0;
-  const trend =
-    s.status === "fading"
-      ? { label: `▼ ${pctChange}%`, color: "var(--status-fading)" }
-      : last > prev
-        ? { label: "▲ RISING", color: "var(--status-active)" }
-        : { label: "— STEADY", color: "var(--ink-muted)" };
+  const pattern = classifyStoryShape(s.daily_counts);
+  const patternStyle = PATTERN_STYLE[pattern];
 
   return (
     <div className="flex items-center gap-2" style={mono}>
@@ -52,7 +45,7 @@ function MetaLineComponent({ s }: { s: StoryCard }) {
       <span>·</span>
       <span>{s.article_count} ARTICLES</span>
       <span>·</span>
-      <span style={{ color: trend.color }}>{trend.label}</span>
+      <span style={{ color: patternStyle.color }}>{patternStyle.label}</span>
     </div>
   );
 }
@@ -64,15 +57,23 @@ function LeanBarComponent({ left, center, right }: { left: number | null; center
   const r = right ?? 0;
   if (l + c + r === 0) return null;
   const pct = (v: number) => Math.round(v * 100);
+  // When center dominates the bar most likely reflects model uncertainty
+  // rather than genuinely centrist framing. Mute the visual to avoid a
+  // confident-looking stat that is really "the model couldn't decide."
+  const centerDominant = c > 0.5;
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-1 w-[150px] overflow-hidden rounded-full" style={{ gap: 1.5 }}>
+      <div
+        className="flex h-1 w-[150px] overflow-hidden rounded-full"
+        style={{ gap: 1.5, opacity: centerDominant ? 0.55 : 1 }}
+        title={centerDominant ? "High center share — model confidence is low for many articles in this story" : undefined}
+      >
         <div style={{ flexGrow: l, background: "var(--bias-left)" }} />
         <div style={{ flexGrow: c, background: "var(--bias-center)" }} />
         <div style={{ flexGrow: r, background: "var(--bias-right)" }} />
       </div>
       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-muted)" }}>
-        {pct(l)}·{pct(c)}·{pct(r)}
+        {centerDominant ? "~" : ""}{pct(l)}·{pct(c)}·{pct(r)}
       </span>
     </div>
   );

@@ -101,7 +101,7 @@ test.describe("Search - /search", () => {
     await input.fill("climate");
     await page.getByRole("button", { name: "Search" }).click({ force: true });
 
-    const matches = page.locator("text=MATCH");
+    const matches = page.locator("text=MATCH").first();
     const noMatches = page.locator("text=No matches");
     await expect(matches.or(noMatches)).toBeVisible({ timeout: 20_000 });
   });
