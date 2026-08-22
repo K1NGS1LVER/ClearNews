@@ -1,0 +1,193 @@
+/* ClearNews shared lesson stylesheet — light theme, print-friendly */
+
+:root {
+  --bg: #ffffff;
+  --text: #212529;
+  --muted: #6c757d;
+  --accent: #0d6efd;
+  --accent-hover: #0a58ca;
+  --border: #dee2e6;
+  --code-bg: #f1f3f5;
+  --code-text: #343a40;
+  --header-bg: #f8f9fa;
+  --pro-con-border: #0d6efd;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  margin: 0;
+  padding: 0;
+}
+
+article.lesson {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+article.lesson header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+article.lesson h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.01em;
+  color: #212529;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 400;
+}
+
+.lesson-body {
+  margin-top: 1.5rem;
+}
+
+.lesson-body h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+  letter-spacing: -0.01em;
+  color: #212529;
+}
+
+.lesson-body h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+  color: #343a40;
+}
+
+.lesson-body p {
+  margin: 0 0 1rem;
+}
+
+.lesson-body p code,
+.lesson-body li code {
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.lesson-body ul {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.5rem;
+}
+
+.lesson-body li {
+  margin-bottom: 0.35rem;
+}
+
+.lesson-body strong {
+  font-weight: 600;
+}
+
+.lesson-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* Flow diagram */
+.flow-diagram {
+  position: relative;
+  padding: 2rem 1rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin: 2rem 0;
+}
+
+.flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-step {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  flex: 1 1 200px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.flow-step h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.flow-step p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6c757d;
+}
+
+.flow-arrow {
+  font-size: 1.5rem;
+  color: #adb5bd;
+  flex: 0 0 auto;
+}
+
+/* Pro/con callouts */
+.pro-con {
+  border-left: 3px solid var(--pro-con-border);
+  padding: 0 0 0 1rem;
+  margin: 1.5rem 0;
+}
+
+.pro-con h5 {
+  margin: 0 0 0.5rem;
+  color: var(--pro-con-border);
+}
+
+.pro-con ul {
+  margin: 0.25rem 0;
+  padding-left: 1.2rem;
+}
+
+.decision-label {
+  display: inline-block;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #343a40;
+}
+
+/* Print-friendly */
+@media print {
+  body { background: white; }
+  article.lesson { max-width: 100%; padding: 0; }
+  .flow-diagram { box-shadow: none; border: 1px solid #ccc; }
+}
