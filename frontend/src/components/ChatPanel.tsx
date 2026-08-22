@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { decodeEntities } from "../api";
-import { createSpeechQueue, extractCompleteSentences, type SpeechQueue } from "../lib/tts";
+import { createSpeechQueue, extractCompleteSentences, playText, type SpeechQueue } from "../lib/tts";
 import { startVad, VAD_SAMPLE_RATE, type VadSession } from "../lib/vad";
 import { pcmToWavFile } from "../lib/wav";
 import { withErrorBoundary } from "./ErrorBoundary";
@@ -74,8 +74,10 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const vadRef = useRef<VadSession | null>(null);
   const transcribeAbortRef = useRef<AbortController | null>(null);
@@ -134,7 +136,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     // A new turn's audio must never overlap whatever a previous turn left
     // playing/queued, voice-originated or not (e.g. a typed follow-up sent
     // while the last voice answer is still being read out).
-    speechQueueRef.current?.stop();
+    stopSpeaking();
     speechQueueRef.current =
       opts?.speak && audioContextRef.current ? createSpeechQueue(audioContextRef.current) : null;
 
@@ -241,9 +243,33 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     }
   }
 
+  function stopSpeaking() {
+    speechQueueRef.current?.stop();
+    speechQueueRef.current = null;
+    setPlayingIndex(null);
+  }
+
+  function speakMessage(index: number, text: string) {
+    if (!text.trim()) return;
+    stopSpeaking();
+
+    // Must happen synchronously in user-gesture handler
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      void audioContextRef.current.resume();
+    }
+
+    setPlayingIndex(index);
+    speechQueueRef.current = playText(text, audioContextRef.current, () => {
+      setPlayingIndex((curr) => (curr === index ? null : curr));
+    });
+  }
+
   function stop() {
     abortRef.current?.abort();
-    speechQueueRef.current?.stop();
+    stopSpeaking();
   }
 
   /** Arm the mic + VAD. Mirrors send()'s guard: don't start while an
@@ -265,9 +291,20 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       void audioContextRef.current.resume();
     }
 
+    setIsSpeaking(false);
     const gen = voiceGenRef.current;
     try {
-      const session = await startVad(handleSpeechEnd);
+      const session = await startVad(
+        handleSpeechEnd,
+        () => setIsSpeaking(true),
+        {
+          vadMisfire: () => setIsSpeaking(false),
+          frameProcessed: (probs) => {
+            if (probs.isSpeech > 0.6) setIsSpeaking(true);
+            else if (probs.isSpeech < 0.25) setIsSpeaking(false);
+          },
+        },
+      );
       if (voiceGenRef.current !== gen) {
         // Cancelled or unmounted while startVad()'s mic-permission/asset
         // load was still pending - a live session just landed after the
@@ -281,6 +318,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     } catch (err) {
       if (voiceGenRef.current !== gen) return; // same race, on the rejection path
       vadRef.current = null;
+      setIsSpeaking(false);
       setVoiceState("idle");
       setVoiceError(
         err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")
@@ -295,6 +333,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       misfires or a mid-recording change of mind. */
   function cancelVoice() {
     voiceGenRef.current = {};
+    setIsSpeaking(false);
     vadRef.current?.stop();
     vadRef.current = null;
     transcribeAbortRef.current?.abort();
@@ -306,6 +345,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       transcription, and hand the transcript to the same send() the typed
       input and suggested-question buttons use. */
   async function handleSpeechEnd(audio: Float32Array) {
+    setIsSpeaking(false);
     vadRef.current?.stop();
     vadRef.current = null;
     setVoiceState("transcribing");
@@ -347,6 +387,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
 
   function clearHistory() {
     if (!window.confirm("Clear this conversation?")) return;
+    stopSpeaking();
     if (sessionId !== null) fetch(`/api/chat/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
     setMessages([]);
     setSessionId(null);
@@ -432,6 +473,54 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                   })}
                 </div>
               )}
+              {m.role === "assistant" && m.content && (
+                <div
+                  className="mt-2 flex items-center justify-end"
+                  style={{ borderTop: "1px solid var(--hair)", paddingTop: "4px" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => (playingIndex === i ? stopSpeaking() : speakMessage(i, m.content))}
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                    style={{
+                      ...mono,
+                      fontSize: "9.5px",
+                      fontWeight: 500,
+                      letterSpacing: "0.06em",
+                      color: playingIndex === i ? "var(--bias-left)" : "var(--ink-muted)",
+                    }}
+                    aria-label={playingIndex === i ? "Stop reading message aloud" : "Read message aloud"}
+                  >
+                    {playingIndex === i ? (
+                      <>
+                        <span
+                          className="inline-block h-2 w-2 rounded-full animate-pulse"
+                          style={{ background: "var(--bias-left)" }}
+                        />
+                        <span>STOP</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="h-3 w-3 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                        </svg>
+                        <span>READ ALOUD</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -464,7 +553,17 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={busy || voiceState !== "idle"}
-            placeholder={storyId ? "Ask about this story…" : "Ask across all stories…"}
+            placeholder={
+              voiceState === "listening"
+                ? isSpeaking
+                  ? "Recording your voice…"
+                  : "Listening for your voice (speak now)…"
+                : voiceState === "transcribing"
+                  ? "Transcribing your question…"
+                  : storyId
+                    ? "Ask about this story…"
+                    : "Ask across all stories…"
+            }
             className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-40"
             style={{ borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }}
           />
@@ -475,7 +574,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             aria-label={
               voiceState === "idle" ? "Record a voice question" : voiceState === "listening" ? "Stop recording" : "Cancel"
             }
-            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             style={
               voiceState === "idle"
                 ? { borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }
@@ -483,9 +582,17 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             }
           >
             {voiceState === "listening" && (
-              <span className="animate-pulse" style={{ ...mono, letterSpacing: "0.04em" }}>
-                ● REC
-              </span>
+              isSpeaking ? (
+                <span className="inline-flex items-center gap-1.5" style={{ ...mono, letterSpacing: "0.04em", color: "var(--bias-right)" }}>
+                  <span className="inline-block h-2 w-2 rounded-full animate-pulse" style={{ background: "var(--bias-right)" }} />
+                  <span>● REC</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 opacity-90" style={{ ...mono, letterSpacing: "0.04em" }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full animate-ping" style={{ background: "var(--surface-1)" }} />
+                  <span>LISTENING…</span>
+                </span>
+              )
             )}
             {voiceState === "transcribing" && (
               <span className="loading-spinner cn-anim" style={{ width: 14, height: 14 }} />

@@ -29,6 +29,10 @@ export type VadSession = {
 export async function startVad(
   speechEnd: (audio: Float32Array) => void,
   speechStart?: () => void,
+  callbacks?: {
+    vadMisfire?: () => void;
+    frameProcessed?: (probs: { isSpeech: number; notSpeech: number }, frame: Float32Array) => void;
+  },
 ): Promise<VadSession> {
   const { MicVAD } = await import("@ricky0123/vad-web");
 
@@ -38,6 +42,8 @@ export async function startVad(
     model: "v5",
     onSpeechStart: speechStart,
     onSpeechEnd: speechEnd,
+    onVADMisfire: callbacks?.vadMisfire,
+    onFrameProcessed: callbacks?.frameProcessed,
   });
 
   return {

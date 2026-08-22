@@ -64,14 +64,21 @@ export type SpeechQueue = {
     handler for autoplay policy - see ChatPanel.tsx's startVoice() - and it
     should be closed on unmount); this module only ever calls
     createBufferSource()/createBuffer() on it. */
-export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
+export function createSpeechQueue(audioContext: AudioContext, onEnded?: () => void): SpeechQueue {
   let stopped = false;
+  let inFlight = 0;
   const activeSources: AudioBufferSourceNode[] = [];
   // Chains playback scheduling in enqueue order; each link resolves to the
   // end time of the sentence it just scheduled (or the previous end time,
   // unchanged, if that sentence failed/was empty), so the next link's
   // start time is always max(now, previous end).
   let schedule: Promise<number> = Promise.resolve(audioContext.currentTime);
+
+  function checkDone() {
+    if (!stopped && inFlight === 0 && activeSources.length === 0) {
+      onEnded?.();
+    }
+  }
 
   function enqueue(sentence: string) {
     if (stopped) return;
@@ -81,6 +88,8 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
       .replace(/\s+/g, " ")
       .trim();
     if (!text) return;
+
+    inFlight++;
 
     const audioPromise = fetch("/api/voice/speak", {
       method: "POST",
@@ -98,7 +107,11 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
 
     schedule = schedule.then(async (prevEndTime) => {
       const raw = await audioPromise;
-      if (stopped || raw === null || raw.byteLength === 0) return prevEndTime;
+      inFlight--;
+      if (stopped || raw === null || raw.byteLength === 0) {
+        checkDone();
+        return prevEndTime;
+      }
 
       try {
         const samples = new Float32Array(raw);
@@ -111,11 +124,15 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
         source.onended = () => {
           const i = activeSources.indexOf(source);
           if (i !== -1) activeSources.splice(i, 1);
+          checkDone();
         };
 
         // Re-check after the await above - stop() may have landed while this
         // sentence's fetch was in flight.
-        if (stopped) return prevEndTime;
+        if (stopped) {
+          checkDone();
+          return prevEndTime;
+        }
         const startTime = Math.max(audioContext.currentTime, prevEndTime);
         source.start(startTime);
         activeSources.push(source);
@@ -127,6 +144,7 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
         // than letting `schedule` reject and silently kill every subsequent
         // sentence in this turn.
         console.error("Failed to schedule TTS audio for a sentence; skipping it.", err);
+        checkDone();
         return prevEndTime;
       }
     });
@@ -141,7 +159,17 @@ export function createSpeechQueue(audioContext: AudioContext): SpeechQueue {
         // Already finished/stopped - nothing to do.
       }
     }
+    onEnded?.();
   }
 
   return { enqueue, stop };
+}
+
+/** Synthesize and play complete text on demand through the streaming sentence queue. */
+export function playText(text: string, audioContext: AudioContext, onEnded?: () => void): SpeechQueue {
+  const queue = createSpeechQueue(audioContext, onEnded);
+  const { sentences, rest } = extractCompleteSentences(text);
+  for (const sentence of sentences) queue.enqueue(sentence);
+  if (rest.trim()) queue.enqueue(rest.trim());
+  return queue;
 }
