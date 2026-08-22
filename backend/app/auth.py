@@ -17,6 +17,7 @@ from app.cache import (
     delete_key,
     delete_session,
     foryou_key,
+    foryou_version,
     get_session_user_id,
     set_session,
 )
@@ -298,5 +299,5 @@ def put_preferences(
     user.countries = req.countries
     db.commit()
     db.refresh(user)
-    delete_key(foryou_key(user.id))
+    delete_key(f"{foryou_key(user.id)}:v{foryou_version()}")
     return _me(user)

@@ -396,7 +396,11 @@ def score_story(
     score += 2.0 / (1 + max(days_since_seen, 0))
 
     if status == "active":
-        score += 0.5
+        score += 2.0
+    elif status == "fading":
+        score += 1.0
+    else:  # dead
+        score -= 1.5
 
     # story_countries covers both source (published-from) and about
     # (content-about) countries - either kind of match counts
@@ -427,9 +431,14 @@ def for_you(
     if cached is not None:
         return [ForYouCard(**c) for c in cached]
 
-    from datetime import UTC, datetime
+    from datetime import UTC, datetime, timedelta
 
     now = datetime.now(UTC)
+    # Only consider stories seen in the last 14 days.  Dead stories older
+    # than that are stale and would otherwise dominate the feed when they
+    # match the user's favourite category / keywords, because those static
+    # preference signals outweigh the recency-decay term.
+    freshness_cutoff = now - timedelta(days=14)
     q = select(
         Story.id,
         Story.title,
@@ -439,7 +448,7 @@ def for_you(
         Story.category,
         Story.keyword_haystack,
         Story.about_countries,
-    )
+    ).where(Story.last_seen >= freshness_cutoff)
     if source_country:
         q = q.where(_source_country_filter(source_country))
     if about_country:
