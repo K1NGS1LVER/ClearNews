@@ -45,7 +45,7 @@ def fetch_country(
     if not query_term:
         raise ValueError(f"no GDELT query name known for country code {iso2!r}")
 
-    c = client or httpx.Client(timeout=60)
+    c = client or httpx.Client(timeout=60, follow_redirects=True)
     resp = c.get(
         DOC_API_URL,
         params={
