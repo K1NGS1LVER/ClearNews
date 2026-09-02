@@ -28,9 +28,16 @@ clickable citation.
   over time. A straight line is stable framing; a bend is a pivot.
 - **Death-risk forecasting** — an XGBoost model predicts whether a story will
   still be covered in 30 days, once enough history exists to train it.
+- **Explainable bias** — SHAP-powered token-level explanations show *why* the
+  classifier labelled an article left, center, or right, with per-story
+  aggregate word importance breakdowns.
 - **A chat agent that cites its sources** — LangGraph + Groq, with hybrid
   (semantic + keyword) retrieval over the archive and an optional live-web
-  search tool, kept visibly distinct from archive citations in the UI.
+  search tool, kept visually distinct from archive citations in the UI.
+- **Voice input & text-to-speech** — talk to the agent with your mic
+  (Whisper STT via VAD), and it reads answers back (Kokoro TTS).
+- **Personalised "For You" feed** — signed-in users get a ranked,
+  category-aware feed with feedback-driven re-ranking.
 
 ## Screenshots
 
@@ -75,13 +82,111 @@ Every stage is also idempotent and safe to run by hand — see
 
 ## Stack
 
-- **Frontend** — React 19, Vite, Tailwind, Recharts, Playwright for e2e tests.
+- **Frontend** — React 19, Vite 8, Tailwind 4, Recharts, D3, React Query,
+  React Router, Playwright for e2e tests.
 - **Backend** — FastAPI, SQLAlchemy, Alembic migrations, PostgreSQL 17 with
-  the `pgvector` extension.
+  the `pgvector` extension, Redis/Valkey for caching and rate limiting.
 - **NLP/ML** — sentence-transformers (MiniLM), VADER, spaCy, a fine-tuned
   BERT bias classifier, HDBSCAN, UMAP, XGBoost, SHAP.
-- **Agent** — LangGraph + Groq, hybrid (vector + Postgres full-text, RRF-fused)
-  retrieval, optional SearXNG/Tavily/Brave live-web search.
+- **Agent** — LangGraph + Groq (`meta-llama/llama-4-scout-17b-16e-instruct`),
+  hybrid (vector + Postgres full-text, RRF-fused) retrieval, optional
+  SearXNG/Tavily/Brave live-web search.
+- **Voice** — faster-whisper (STT), Kokoro (TTS), @ricky0123/vad-web
+  (browser-side voice activity detection).
+- **Auth** — cookie-based sessions, argon2 password hashing, Redis session
+  store.
+
+## Pages & features
+
+| Route | Page | Description |
+|---|---|---|
+| `/` | Landing | Marketing page for signed-out users; redirects to For You if signed in |
+| `/foryou` | For You | Personalised feed — category, keyword, and bias-preference aware ranking with feedback buttons |
+| `/stories` | Feed | All tracked stories with infinite scroll, filterable by status and country |
+| `/story/:id` | Story | Full story arc — coverage charts, sentiment, bias breakdown, outlet table, drift map, forecast, milestones, SHAP explainability, ask sidebar |
+| `/article/:id` | Article | Single article reader — extracted full text, bias chip, sentiment, link to original |
+| `/search` | Search | Semantic search across the archive with story-grouped results |
+| `/analytics` | Analytics | Global outlet bias landscape |
+| `/chat` | Chat | Standalone chat with the research agent (global scope) |
+| `/login` | Login | Email + password auth |
+| `/signup` | Signup | Account creation |
+| `/forgot-password` | Forgot Password | Password reset request |
+| `/reset-password` | Reset Password | Token-based password reset |
+| `/welcome` | Welcome | Post-signup onboarding — pick categories, bias preference, keywords |
+
+## API reference
+
+All endpoints are prefixed with `/api`. Interactive docs are auto-generated at
+`/docs` (Swagger UI) and `/redoc` when the backend is running.
+
+### Health & monitoring
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness + readiness probe — verifies DB and Redis connectivity, returns `200` or `503` |
+
+### Stories & feed
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/stories` | no | Paginated story list, filterable by `status`, `source_country`, `about_country` |
+| `GET` | `/feed` | no | Alias for `/stories` |
+| `GET` | `/foryou` | yes | Personalised ranked feed |
+| `GET` | `/stories/{id}` | no | Story detail |
+| `GET` | `/stories/{id}/arc` | no | Full story arc: metrics, articles, forecast, milestones |
+| `GET` | `/stories/{id}/outlets` | no | Per-outlet breakdown for a story |
+| `GET` | `/stories/{id}/drift` | no | 2D UMAP drift projection |
+| `GET` | `/stories/{id}/explanation` | no | SHAP bias explanation for a story's articles |
+| `POST` | `/stories/{id}/explanation/step` | no | Trigger incremental SHAP computation |
+| `POST` | `/stories/{id}/feedback` | yes | "More like this" / "Less like this" signal |
+| `GET` | `/stories/search?q=` | no | Semantic story search |
+| `POST` | `/summarise/{id}` | no | One-shot LLM summary (rate limited: 5/min) |
+
+### Articles & search
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/articles/{id}` | Full article with extracted text |
+| `GET` | `/search?q=` | Semantic article search |
+
+### Chat agent
+
+| Method | Endpoint | Auth | Rate limit | Description |
+|---|---|---|---|---|
+| `GET` | `/chat/sessions` | yes | — | List user's chat sessions |
+| `POST` | `/chat/sessions` | yes | — | Create a new chat session |
+| `GET` | `/chat/sessions/{id}` | yes | — | Get session with message history |
+| `PATCH` | `/chat/sessions/{id}` | yes | — | Update session title |
+| `DELETE` | `/chat/sessions/{id}` | yes | — | Delete session |
+| `POST` | `/chat` | yes | 20/min | Stream a message (SSE) |
+| `GET` | `/suggest` | — | 10/min | Suggested follow-up questions |
+
+### Voice
+
+| Method | Endpoint | Auth | Rate limit | Description |
+|---|---|---|---|---|
+| `POST` | `/voice/transcribe` | yes | 20/min | Upload audio for Whisper STT |
+| `POST` | `/voice/speak` | yes | 60/min | Text-to-speech via Kokoro |
+
+### Auth
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/auth/signup` | Create account |
+| `POST` | `/auth/login` | Log in (sets session cookie) |
+| `POST` | `/auth/logout` | Log out (clears session) |
+| `POST` | `/auth/forgot-password` | Request password reset email |
+| `POST` | `/auth/reset-password` | Reset password with token |
+| `GET` | `/me` | Current user profile |
+| `PUT` | `/me/preferences` | Update display name, categories, bias pref, keywords, countries |
+
+### Analytics & geo
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/analytics` | Global outlet stats |
+| `GET` | `/outlets/map` | Outlet bias landscape data |
+| `GET` | `/countries` | Supported countries with article/story counts |
 
 ## Prerequisites
 
@@ -218,9 +323,9 @@ instance. Docker Compose's `valkey` service does set a password (see
 
 ## Docker
 
-The simplest way to run the whole stack — Postgres, the API, the scheduler,
-the frontend, and a self-hosted SearXNG instance for live-web search — with
-one command and no package-manager setup at all:
+The simplest way to run the whole stack — Postgres, Valkey, the API, the
+scheduler, the frontend, and a self-hosted SearXNG instance for live-web
+search — with one command and no package-manager setup at all:
 
 ```bash
 cp backend/.env.example backend/.env   # add your GROQ_API_KEY (free at console.groq.com)
@@ -233,6 +338,9 @@ metrics), so the feed fills in within a minute or two. `docker-compose.yml`
 also wires `WEB_SEARCH_PROVIDER=searxng` automatically, so the chat agent's
 live-web tool works out of the box against the bundled SearXNG container —
 no extra setup needed for that either.
+
+The backend's Docker healthcheck verifies DB and Redis connectivity via
+`/api/health`, not just that the process is alive.
 
 To backfill more history than the automatic bootstrap pulls:
 
@@ -292,20 +400,46 @@ pnpm install
 
 All variables live in `backend/.env` (copy from `backend/.env.example`).
 
+### Core
+
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `REDIS_URL` | yes | `redis://localhost:6379/0` | Redis/Valkey connection string — rate limiting fails closed (503) without it |
+| `ENV` | production only | — | set to `production` to mark the session cookie `Secure` |
+| `FRONTEND_ORIGIN` | production only | — | comma-separated; enables CORS when the frontend isn't behind the Docker/Vercel proxy |
+
+### LLM / agent
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
 | `GROQ_API_KEY` | for chat/summaries/suggestions | — | free key at [console.groq.com](https://console.groq.com) |
 | `GROQ_MODEL` | no | `meta-llama/llama-4-scout-17b-16e-instruct` | chat agent model |
 | `SUGGEST_MODEL` | no | `openai/gpt-oss-20b` | separate small model for suggested follow-ups, so Groq's per-model free-tier rate limit doesn't starve chat |
+| `LLM_PROVIDER` | no | `groq` | chat LLM backend: `groq`, `ollama`, `openrouter`, or `openai` |
+| `PIPELINE_GROQ_MODEL` | no | `openai/gpt-oss-20b` | pipeline LLM primary tier |
+| `PIPELINE_GROQ_FALLBACK_MODEL` | no | `openai/gpt-oss-120b` | pipeline LLM fallback tier |
 | `CHAT_RECURSION_LIMIT` | no | `12` | max agent tool-call rounds per reply |
+
+### Web search
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
 | `WEB_SEARCH_PROVIDER` | no | `searxng` | `searxng`, `tavily`, or `brave` |
 | `SEARXNG_URL` | no | `http://searxng:8080` | only used when the provider is `searxng` |
 | `TAVILY_API_KEY` | only if provider is `tavily` | — | quota-limited free tier |
 | `BRAVE_SEARCH_API_KEY` | only if provider is `brave` | — | quota-limited free tier |
-| `ENV` | production only | — | set to `production` to mark the session cookie `Secure` |
-| `FRONTEND_ORIGIN` | production only | — | comma-separated; enables CORS when the frontend isn't behind the Docker/Vercel proxy |
+
+### Ollama / OpenRouter / OpenAI (alternative LLM providers)
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `OLLAMA_MODEL` | no | `qwen2.5:1.5b` | model name when `LLM_PROVIDER=ollama` |
+| `OLLAMA_BASE_URL` | no | `http://localhost:11434/v1` | Ollama server URL |
+| `OPENROUTER_MODEL` | no | `meta-llama/llama-4-scout-17b-16e-instruct` | model when `LLM_PROVIDER=openrouter` |
+| `OPENROUTER_API_KEY` | if using openrouter | — | OpenRouter API key |
+| `OPENAI_MODEL` | no | `gpt-4o-mini` | model when `LLM_PROVIDER=openai` |
+| `OPENAI_API_KEY` | if using openai | — | OpenAI API key |
 
 Outside Docker, `WEB_SEARCH_PROVIDER` defaults to `searxng` but there's no
 SearXNG instance to talk to unless you run one yourself — the tool just
@@ -341,6 +475,19 @@ uv run python -m pipeline.backfill 7 2     # 7 days back, 2 samples/day, dedupes
 uv run python -m pipeline.scheduler
 ```
 
+### Pipeline stages
+
+| Stage | Schedule | What it does |
+|---|---|---|
+| `ingest` | Every 15 min | Pulls the latest GDELT GKG file, dedupes by URL |
+| `fetch_content` | After ingest | Extracts full article text via trafilatura, fetches hero images |
+| `nlp` | After fetch | MiniLM embeddings, VADER sentiment, spaCy NER, politicalBiasBERT classification |
+| `cluster` | Hourly | HDBSCAN clustering to group articles into stories |
+| `metrics` | Nightly | Daily story metrics, narrative drift (UMAP), story status transitions |
+| `topics` | After cluster | Zero-shot topic assignment per story |
+| `predict` | Nightly | XGBoost death-risk forecasting (requires training data) |
+| `explain` | On-demand | SHAP token-level bias explanations |
+
 ## Tests
 
 ```bash
@@ -366,13 +513,48 @@ Supabase (Postgres/pgvector): see [docs/DEPLOY.md](docs/DEPLOY.md).
 ```
 setup.sh             one-shot local dev setup (deps, DB, env file, migrations)
 dev.sh               runs backend + frontend together, hot reload
-backend/app/         FastAPI app, SQLAlchemy models, auth
-backend/alembic/     schema migrations
-backend/pipeline/    ingestion, NLP, clustering, analytics jobs
-backend/agent/       LangGraph chat agent + hybrid retrieval + live-web search tool
-backend/scripts/     post-install utilities (macOS OpenMP fix)
-frontend/src/        Feed, Story, Search, Analytics, Chat pages
-frontend/e2e/        Playwright end-to-end tests
+docker-compose.yml   full stack: Postgres, Valkey, backend, scheduler, SearXNG, frontend
+render.yaml          Render deployment blueprint
+
+backend/
+├── app/
+│   ├── main.py      FastAPI app — all endpoints, health check
+│   ├── models.py    SQLAlchemy ORM models (Story, Article, Outlet, User, etc.)
+│   ├── auth.py      cookie-based session auth, argon2 hashing
+│   ├── cache.py     Redis-backed caching, session store, NLP queue
+│   ├── retrieval.py hybrid (vector + full-text) search with RRF fusion
+│   ├── ratelimit.py per-endpoint rate limiting via Redis
+│   ├── voice.py     Whisper STT + Kokoro TTS
+│   └── db.py        SQLAlchemy engine and session factory
+├── agent/
+│   ├── chat.py      LangGraph ReAct agent, streaming, fallback logic
+│   └── tools.py     search_corpus, search_story, web_search, get_story_arc
+├── pipeline/
+│   ├── scheduler.py continuous pipeline orchestrator
+│   ├── ingest.py    GDELT GKG fetcher
+│   ├── fetch_content.py  article text extraction (httpx + trafilatura)
+│   ├── nlp.py       embeddings, sentiment, bias, NER
+│   ├── cluster.py   HDBSCAN story clustering
+│   ├── metrics.py   daily story metrics, drift, status transitions
+│   ├── predict.py   XGBoost death-risk forecasting
+│   ├── explain.py   SHAP bias explanations
+│   ├── agent_llm.py multi-tier LLM router (Groq → Ollama fallback)
+│   └── topics.py    zero-shot topic classification
+├── alembic/         schema migrations
+├── scripts/         post-install utilities (macOS OpenMP fix)
+└── tests/           pytest suite
+
+frontend/
+├── src/
+│   ├── api.ts       centralized API client — all fetch calls, TypeScript types
+│   ├── auth.ts      useMe hook (React Query)
+│   ├── theme.ts     dark/light mode toggle
+│   ├── pages/       Feed, Story, Article, Search, Analytics, Chat, ForYou, etc.
+│   ├── components/  ChatPanel, BiasChip, DriftMap, FilterBar, ErrorBoundary, etc.
+│   └── lib/         tts.ts, vad.ts, wav.ts, filters.ts
+├── e2e/             Playwright end-to-end tests
+└── public/          static assets
+
 searxng/             settings for the self-hosted live-web search container
 docs/                demo script, deploy guide, design research, screenshots
 ```
