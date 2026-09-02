@@ -16,10 +16,10 @@ x-backend-image: &backend-image
     valkey:
       condition: service_healthy
   # Healthcheck shared by backend, scheduler, and any future services that
-  # depend on the API being reachable. The /docs endpoint is lightweight and
-  # guaranteed to exist on every FastAPI instance.
+  # depend on the API being reachable. /api/health verifies DB and Redis
+  # connectivity, not just that the process is alive.
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+    test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
     interval: 30s
     timeout: 5s
     start_period: 60s  # give torch/spaCy models time to load on first boot

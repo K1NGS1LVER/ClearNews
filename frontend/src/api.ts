@@ -252,3 +252,71 @@ export const fetchStoryExplanation = (id: number) =>
   get<StoryExplanation>(`/stories/${id}/explanation`);
 export const stepStoryExplanation = (id: number, refresh = false) =>
   send<StoryExplanation>("POST", `/stories/${id}/explanation/step`, { refresh });
+
+// -- Chat & voice (previously hardcoded in ChatPanel.tsx) --
+
+export type ChatSession = { id: number };
+
+export const createChatSession = (storyId: number | null) =>
+  send<ChatSession>("POST", "/chat/sessions", { story_id: storyId });
+
+export const deleteChatSession = (sessionId: number) =>
+  fetch(base + `/chat/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+
+/** POST /api/chat — returns the raw Response for SSE streaming. */
+export async function postChat(
+  sessionId: number,
+  content: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const resp = await fetch(base + "/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({ session_id: sessionId, content }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(
+      resp.status === 401
+        ? "Please sign in to use the chat."
+        : `chat failed: ${resp.status} ${body}`,
+    );
+  }
+  return resp;
+}
+
+export type SuggestResponse = { questions: string[] };
+
+export const fetchSuggestions = (params: { story_id?: number; context?: string }) =>
+  get<SuggestResponse>("/suggest" + qs(params));
+
+/** POST /api/voice/transcribe — multipart form upload. */
+export async function transcribeVoice(
+  form: FormData,
+  signal?: AbortSignal,
+): Promise<{ transcript: string }> {
+  const resp = await fetch(base + "/voice/transcribe", {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  if (!resp.ok) {
+    if (resp.status === 401) throw new Error("Please log in to use voice input.");
+    if (resp.status === 413) throw new Error("Recording too long - try a shorter clip.");
+    if (resp.status === 429) throw new Error("Too many voice requests - wait a moment and try again.");
+    if (resp.status === 503) throw new Error("Voice transcription is unavailable right now.");
+    throw new Error(`transcribe failed: ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// -- Article detail (previously hardcoded in Article.tsx) --
+
+export type ArticleDetail = ArticleOut & {
+  content: string | null;
+  story_id: number | null;
+  story_title: string | null;
+};
+
+export const fetchArticle = (id: number) => get<ArticleDetail>(`/articles/${id}`);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { decodeEntities } from "../api";
+import { createChatSession, decodeEntities, deleteChatSession, fetchSuggestions, postChat, transcribeVoice } from "../api";
 import { createSpeechQueue, extractCompleteSentences, playText, type SpeechQueue } from "../lib/tts";
 import { startVad, VAD_SAMPLE_RATE, type VadSession } from "../lib/vad";
 import { pcmToWavFile } from "../lib/wav";
@@ -115,8 +115,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
 
   useEffect(() => {
     if (storyId) {
-      fetch(`/api/suggest?story_id=${storyId}`)
-        .then((r) => r.json())
+      fetchSuggestions({ story_id: storyId })
         .then((d) => setSuggested(d.questions ?? []))
         .catch(() => {});
     }
@@ -146,30 +145,13 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     try {
       let activeSessionId = sessionId;
       if (activeSessionId === null) {
-        const created = await fetch("/api/chat/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ story_id: storyId ?? null }),
-        });
-        if (!created.ok) {
-        const body = await created.text().catch(() => "");
-        throw new Error(created.status === 401 ? "Please sign in to use the chat." : `session failed: ${created.status} ${body}`);
-      }
-        activeSessionId = (await created.json()).id;
+        const created = await createChatSession(storyId ?? null);
+        activeSessionId = created.id;
         setSessionId(activeSessionId);
       }
-      const resp = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          session_id: activeSessionId,
-          content: text,
-        }),
-      });
-      if (!resp.ok || !resp.body) {
-        const body = await resp.text().catch(() => "");
-        throw new Error(resp.status === 401 ? "Please sign in to use the chat." : `chat failed: ${resp.status} ${body}`);
+      const resp = await postChat(activeSessionId!, text, controller.signal);
+      if (!resp.body) {
+        throw new Error("No response body");
       }
 
       const reader = resp.body.getReader();
@@ -221,8 +203,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
         const rest = answer.slice(spokenUpTo).trim();
         if (rest) speechQueueRef.current.enqueue(rest);
       }
-      fetch(`/api/suggest?context=${encodeURIComponent(answer.slice(0, 1500))}`)
-        .then((r) => r.json())
+      fetchSuggestions({ context: answer.slice(0, 1500) })
         .then((d) => setSuggested(d.questions ?? []))
         .catch(() => {});
     } catch (err) {
@@ -355,19 +336,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     try {
       const form = new FormData();
       form.append("file", pcmToWavFile(audio, VAD_SAMPLE_RATE));
-      const resp = await fetch("/api/voice/transcribe", {
-        method: "POST",
-        body: form,
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        if (resp.status === 401) throw new Error("Please log in to use voice input.");
-        if (resp.status === 413) throw new Error("Recording too long - try a shorter clip.");
-        if (resp.status === 429) throw new Error("Too many voice requests - wait a moment and try again.");
-        if (resp.status === 503) throw new Error("Voice transcription is unavailable right now.");
-        throw new Error(`transcribe failed: ${resp.status}`);
-      }
-      const data = await resp.json();
+      const data = await transcribeVoice(form, controller.signal);
       const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
       setVoiceState("idle");
       if (transcript) {
@@ -388,7 +357,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   function clearHistory() {
     if (!window.confirm("Clear this conversation?")) return;
     stopSpeaking();
-    if (sessionId !== null) fetch(`/api/chat/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+    if (sessionId !== null) deleteChatSession(sessionId);
     setMessages([]);
     setSessionId(null);
     setSuggested([]);

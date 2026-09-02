@@ -18,7 +18,7 @@ from langchain_openai import ChatOpenAI
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIERS: list[dict[str, Any]] = [
-    {"provider": "groq", "model": os.getenv("PIPELINE_GROQ_MODEL", "llama-3.1-8b-instant")},
+    {"provider": "groq", "model": os.getenv("PIPELINE_GROQ_MODEL", "openai/gpt-oss-20b")},
     {"provider": "groq", "model": os.getenv("PIPELINE_GROQ_FALLBACK_MODEL", "openai/gpt-oss-120b")},
     {"provider": "ollama", "model": os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")},
 ]

@@ -99,7 +99,7 @@ def test_parse_llm_json():
 def test_build_client_groq_missing_key(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     with pytest.raises(ValueError, match="GROQ_API_KEY is not set"):
-        _build_client({"provider": "groq", "model": "llama-3.1-8b-instant"})
+        _build_client({"provider": "groq", "model": "openai/gpt-oss-20b"})
 
 
 def test_build_client_ollama(monkeypatch):

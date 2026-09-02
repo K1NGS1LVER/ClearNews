@@ -297,8 +297,8 @@ All variables live in `backend/.env` (copy from `backend/.env.example`).
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `REDIS_URL` | yes | `redis://localhost:6379/0` | Redis/Valkey connection string — rate limiting fails closed (503) without it |
 | `GROQ_API_KEY` | for chat/summaries/suggestions | — | free key at [console.groq.com](https://console.groq.com) |
-| `GROQ_MODEL` | no | `openai/gpt-oss-120b` | chat agent model |
-| `SUGGEST_MODEL` | no | `llama-3.1-8b-instant` | separate small model for suggested follow-ups, so Groq's per-model free-tier rate limit doesn't starve chat |
+| `GROQ_MODEL` | no | `meta-llama/llama-4-scout-17b-16e-instruct` | chat agent model |
+| `SUGGEST_MODEL` | no | `openai/gpt-oss-20b` | separate small model for suggested follow-ups, so Groq's per-model free-tier rate limit doesn't starve chat |
 | `CHAT_RECURSION_LIMIT` | no | `12` | max agent tool-call rounds per reply |
 | `WEB_SEARCH_PROVIDER` | no | `searxng` | `searxng`, `tavily`, or `brave` |
 | `SEARXNG_URL` | no | `http://searxng:8080` | only used when the provider is `searxng` |
@@ -311,9 +311,9 @@ Outside Docker, `WEB_SEARCH_PROVIDER` defaults to `searxng` but there's no
 SearXNG instance to talk to unless you run one yourself — the tool just
 returns no results in that case, it doesn't error.
 
-> Don't switch `GROQ_MODEL` to `llama-3.3-70b-versatile` — it emits malformed
-> tool calls on Groq and the agent will fail with "tool call validation
-> failed". `openai/gpt-oss-120b` is the default because it tool-calls reliably.
+> **Note:** The older Llama 3.x models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`)
+> were deprecated on Groq in August 2026. The defaults now use `meta-llama/llama-4-scout-17b-16e-instruct`
+> for chat and `openai/gpt-oss-20b` for suggestions.
 
 ## Data pipeline
 

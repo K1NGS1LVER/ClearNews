@@ -93,6 +93,38 @@ if _frontend_origins:
     )
 
 
+@app.get("/api/health")
+def health(db: Session = Depends(get_db)):
+    """Liveness + readiness probe: verifies DB and Redis connectivity."""
+    checks: dict[str, str] = {}
+
+    # Database
+    try:
+        db.execute(select(func.count()).select_from(Story.__table__))
+        checks["db"] = "ok"
+    except Exception as exc:
+        checks["db"] = f"error: {exc}"
+
+    # Redis / Valkey
+    from app.cache import _client as redis_client
+    try:
+        r = redis_client()
+        if r is not None:
+            r.ping()
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "unavailable"
+    except Exception as exc:
+        checks["redis"] = f"error: {exc}"
+
+    healthy = all(v == "ok" for v in checks.values())
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={"status": "healthy" if healthy else "degraded", "checks": checks},
+    )
+
+
 class StoryCard(BaseModel):
     id: int
     title: str

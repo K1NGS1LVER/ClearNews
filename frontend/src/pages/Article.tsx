@@ -1,15 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { decodeEntities, type ArticleOut } from "../api";
+import { decodeEntities, fetchArticle, type ArticleDetail } from "../api";
 import BiasChip from "../components/BiasChip";
 import Loading from "../components/Loading";
 import StoryAsk from "../components/StoryAsk";
-
-type ArticleDetail = ArticleOut & {
-  content: string | null;
-  story_id: number | null;
-  story_title: string | null;
-};
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -19,10 +13,7 @@ export default function Article() {
   const id = Number(useParams().id);
   const { data: a, isLoading } = useQuery<ArticleDetail>({
     queryKey: ["article", id],
-    queryFn: () => fetch(`/api/articles/${id}`).then((r) => {
-      if (!r.ok) throw new Error(String(r.status));
-      return r.json();
-    }),
+    queryFn: () => fetchArticle(id),
   });
 
   if (isLoading)

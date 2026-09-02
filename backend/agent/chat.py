@@ -17,12 +17,12 @@ from langgraph.prebuilt import create_react_agent
 
 from agent.tools import get_story_arc, list_stories, make_search_story, search_corpus, web_search
 
-MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-SUGGEST_MODEL = os.getenv("SUGGEST_MODEL", "llama-3.1-8b-instant")
+MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+SUGGEST_MODEL = os.getenv("SUGGEST_MODEL", "openai/gpt-oss-20b")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 # Cap the ReAct tool loop. When retrieval turns up nothing on-topic, the model
 # keeps re-searching instead of answering; without a cap it runs to LangGraph's
@@ -269,16 +269,20 @@ async def stream_chat(
 
 def suggest_questions(context: str) -> list[str]:
     """Three follow-up questions for the given story/answer context."""
-    resp = _suggest_llm().invoke(
-        [
-            (
-                "system",
-                "Suggest exactly 3 short, distinct follow-up questions a reader "
-                "might ask next. Return them as a JSON array of strings, nothing else.",
-            ),
-            ("user", context[:6000]),
-        ]
-    )
+    try:
+        resp = _suggest_llm().invoke(
+            [
+                (
+                    "system",
+                    "Suggest exactly 3 short, distinct follow-up questions a reader "
+                    "might ask next. Return them as a JSON array of strings, nothing else.",
+                ),
+                ("user", context[:6000]),
+            ]
+        )
+    except Exception as exc:
+        print(f"suggest_questions LLM error: {exc}")
+        return []
     try:
         questions = json.loads(resp.content)
         return [q for q in questions if isinstance(q, str)][:3]
