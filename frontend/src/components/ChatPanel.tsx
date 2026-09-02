@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createChatSession, decodeEntities, deleteChatSession, fetchSuggestions, postChat, transcribeVoice } from "../api";
+import { useQuery } from "@tanstack/react-query";
+import { createChatSession, decodeEntities, deleteChatSession, fetchStories, fetchSuggestions, postChat, transcribeVoice, type StoryCard } from "../api";
 import { createSpeechQueue, extractCompleteSentences, playText, type SpeechQueue } from "../lib/tts";
 import { startVad, VAD_SAMPLE_RATE, type VadSession } from "../lib/vad";
 import { pcmToWavFile } from "../lib/wav";
@@ -20,6 +21,16 @@ type Msg = { role: "user" | "assistant"; content: string; sources?: Source[] };
 type VoiceState = "idle" | "listening" | "transcribing";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
+
+/** Curated archive-level inquiry prompts for the global chat empty state.
+ *  These guide the user toward ClearNews' core analytical capabilities:
+ *  cross-spectrum divergence, international developments, active reporting, and media drift. */
+export const GLOBAL_SUGGESTED_QUESTIONS = [
+  "Which stories show the biggest divergence between left and right coverage?",
+  "Summarize recent developments in international relations across the archive.",
+  "What are the most active stories being reported today?",
+  "Which topics have experienced notable media drift over the past week?",
+];
 
 const leanColor = (label: string | null) =>
   label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--ink-muted)";
@@ -120,6 +131,14 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
         .catch(() => {});
     }
   }, [storyId]);
+
+  // Fetch top active/rising stories for the global empty state.
+  // Disabled when scoped to a specific story (storyId) or once a conversation is active.
+  const { data: trendingStories } = useQuery<StoryCard[]>({
+    queryKey: ["trendingAskStories"],
+    queryFn: () => fetchStories({ limit: 4, status: "active" }),
+    enabled: !storyId && messages.length === 0,
+  });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -379,10 +398,119 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       )}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
         {messages.length === 0 && (
-          <p className="py-8 text-center text-sm" style={{ color: "var(--ink-muted)" }}>
-            Ask about {storyId ? "this story" : "any story in the archive"} - answers cite
-            the underlying articles.
-          </p>
+          <div className="flex flex-col gap-5 py-2" data-testid="ask-empty-state">
+            <div className="text-center sm:text-left">
+              <p className="text-xs sm:text-sm" style={{ color: "var(--ink-muted)" }}>
+                Ask about {storyId ? "this story" : "any story in the archive"} — answers cite the underlying articles across perspectives.
+              </p>
+            </div>
+
+            {/* Suggested Question Pills */}
+            <div className="flex flex-col gap-2" data-testid="suggested-questions-section">
+              <span
+                style={{
+                  ...mono,
+                  fontSize: "10px",
+                  letterSpacing: "0.08em",
+                  color: "var(--ink-muted)",
+                }}
+              >
+                SUGGESTED QUESTIONS
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(storyId ? (suggested.length > 0 ? suggested : []) : GLOBAL_SUGGESTED_QUESTIONS).map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => send(q)}
+                    disabled={busy}
+                    data-testid="suggested-question-pill"
+                    className="cursor-pointer rounded-full border px-3 py-1.5 text-left text-xs transition-colors hover:border-[var(--ink)] disabled:opacity-40"
+                    style={{
+                      borderColor: "var(--hair)",
+                      background: "var(--surface-1)",
+                      color: "var(--ink)",
+                    }}
+                  >
+                    <span style={{ color: "var(--baseline)", marginRight: 5 }}>✦</span>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Trending & Rising Stories (Discrete Agent Prompts) */}
+            {!storyId && trendingStories && trendingStories.length > 0 && (
+              <div
+                className="flex flex-col gap-2 border-t pt-3.5"
+                style={{ borderColor: "var(--hair)" }}
+                data-testid="trending-stories-section"
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    style={{
+                      ...mono,
+                      fontSize: "9.5px",
+                      letterSpacing: "0.08em",
+                      color: "var(--ink-muted)",
+                    }}
+                  >
+                    EXPLORE TOP STORIES
+                  </span>
+                  <span
+                    className="hidden sm:inline"
+                    style={{
+                      ...mono,
+                      fontSize: "9px",
+                      letterSpacing: "0.04em",
+                      color: "var(--ink-muted)",
+                    }}
+                  >
+                    ASK AGENT
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {trendingStories.map((story) => (
+                    <button
+                      key={story.id}
+                      type="button"
+                      onClick={() =>
+                        send(
+                          `What are the main viewpoints and differences in coverage regarding: "${decodeEntities(story.agent_headline || story.title)}"?`
+                        )
+                      }
+                      disabled={busy}
+                      data-testid="trending-story-card"
+                      className="group flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors hover:border-[var(--ink-muted)] hover:bg-black/[0.02] dark:hover:bg-white/[0.03] disabled:opacity-40"
+                      style={{ borderColor: "var(--hair)", background: "transparent" }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-0.5 flex items-center gap-1.5" style={{ ...mono, fontSize: "9px", color: "var(--ink-muted)" }}>
+                          <span>{story.article_count} ARTICLES</span>
+                          <span>·</span>
+                          <span>{story.status.toUpperCase()}</span>
+                        </div>
+                        <span
+                          className="line-clamp-1 text-xs leading-snug group-hover:underline"
+                          style={{ color: "var(--ink)", fontWeight: 500 }}
+                        >
+                          {decodeEntities(story.agent_headline || story.title)}
+                        </span>
+                      </div>
+                      <span
+                        className="shrink-0 text-xs transition-transform group-hover:translate-x-0.5"
+                        style={{ ...mono, color: "var(--ink-muted)" }}
+                        aria-hidden="true"
+                      >
+                        →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
         <div className="flex flex-col gap-3">
           {messages.map((m, i) => (
