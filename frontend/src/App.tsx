@@ -35,6 +35,7 @@ const pillStyle = ({ isActive }: { isActive: boolean }) => ({
   fontWeight: isActive ? 600 : 400,
   background: isActive ? "var(--navpill)" : "transparent",
   color: isActive ? "var(--navpill-ink)" : "var(--ink-2)",
+  textDecoration: "none",
 });
 
 function page(name: string, element: ReactNode, resetKey: string) {
@@ -129,7 +130,7 @@ export default function App() {
           </span>
           <nav className="ml-auto hidden items-center gap-0.5 text-sm md:flex">
             {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} style={pillStyle}>
+              <NavLink key={item.to} to={item.to} end={item.end} className="no-underline" style={pillStyle}>
                 {item.label}
               </NavLink>
             ))}
