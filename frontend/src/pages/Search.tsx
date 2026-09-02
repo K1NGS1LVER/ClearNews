@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { decodeEntities, searchStories } from "../api";
+import { decodeEntities, fetchStories, searchStories } from "../api";
+import { LeanBar, MetaLine } from "../components/StoryBits";
 
 const mono = { fontFamily: "var(--font-mono)" } as const;
 const serif = { fontFamily: "var(--font-serif)" } as const;
@@ -17,14 +18,35 @@ const statusColor: Record<string, string> = {
   dead: "var(--status-dead)",
 };
 
+const SUGGESTED_QUERIES = [
+  "Diplomatic negotiations & ceasefire terms",
+  "Central bank rate cuts and inflation debate",
+  "Renewable energy transition vs energy security",
+  "Antitrust regulations on Big Tech and AI",
+  "Immigration policy and border enforcement",
+  "Trade tariffs, domestic manufacturing & supply chains",
+];
+
 export default function Search() {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
+
   const { data, isFetching } = useQuery({
     queryKey: ["searchStories", query],
     queryFn: () => searchStories(query),
     enabled: query.length > 0,
   });
+
+  const { data: popularStories } = useQuery({
+    queryKey: ["popularSearchSuggestions"],
+    queryFn: () => fetchStories({ limit: 6, status: "active" }),
+    enabled: query.length === 0,
+  });
+
+  const handleSearch = (term: string) => {
+    setInput(term);
+    setQuery(term);
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-8 pt-2 sm:px-8">
@@ -60,13 +82,101 @@ export default function Search() {
         </button>
       </form>
 
+      {/* When no search is active, display curated topics & popular opinions */}
+      {!query && (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2.5">
+            <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
+              SUGGESTED PERSPECTIVES · MAJOR OPINION DEBATES
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTED_QUERIES.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => handleSearch(suggestion)}
+                  className="cursor-pointer rounded-full border px-3 py-1.5 text-xs transition-colors hover:border-[var(--ink)]"
+                  style={{
+                    borderColor: "var(--hair)",
+                    background: "var(--surface-1)",
+                    color: "var(--ink)",
+                  }}
+                >
+                  <span style={{ color: "var(--baseline)", marginRight: 5 }}>⌕</span>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {popularStories && popularStories.length > 0 && (
+            <div className="flex flex-col gap-3 border-t pt-5" style={{ borderColor: "var(--hair)" }}>
+              <div className="flex items-center justify-between">
+                <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
+                  POPULAR STORIES ACROSS PERSPECTIVES
+                </span>
+                <span className="hidden sm:inline" style={{ ...mono, fontSize: "9.5px", color: "var(--baseline)" }}>
+                  POLITICAL DIVERSITY
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {popularStories.map((story) => (
+                  <div
+                    key={story.id}
+                    className="flex flex-col justify-between gap-3 rounded-lg border p-3.5 transition-colors hover:border-[var(--ink)]"
+                    style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <MetaLine s={story} />
+                      <Link
+                        to={`/story/${story.id}`}
+                        className="line-clamp-2 text-sm font-semibold hover:underline"
+                        style={{ ...serif, color: "var(--ink)" }}
+                      >
+                        {decodeEntities(story.agent_headline || story.title)}
+                      </Link>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: "var(--hair)" }}>
+                      <LeanBar left={story.bias_left_share} center={story.bias_center_share} right={story.bias_right_share} />
+                      <button
+                        type="button"
+                        onClick={() => handleSearch(decodeEntities(story.agent_headline || story.title))}
+                        className="cursor-pointer text-[10px] font-semibold hover:underline"
+                        style={{ ...mono, color: "var(--ink-muted)" }}
+                        title="Search related coverage"
+                      >
+                        SEARCH ⌕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search results view */}
       {data && (
-        <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-          {data.length} STORY MATCH{data.length === 1 ? "" : "ES"}
-        </span>
+        <div className="flex items-center justify-between">
+          <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+            {data.length} STORY MATCH{data.length === 1 ? "" : "ES"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setInput("");
+            }}
+            className="cursor-pointer text-xs font-medium hover:underline"
+            style={{ ...mono, color: "var(--ink-muted)" }}
+          >
+            Clear search ✕
+          </button>
+        </div>
       )}
       {data && data.length === 0 && (
-        <p className="mt-2 text-sm" style={{ color: "var(--ink-muted)" }}>No matches.</p>
+        <p className="mt-2 text-sm" style={{ color: "var(--ink-muted)" }}>No matches found for "{query}".</p>
       )}
       <div className="mt-3 flex flex-col gap-4">
         {data?.map((s) => (
