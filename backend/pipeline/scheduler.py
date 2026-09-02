@@ -16,6 +16,7 @@ import sys
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from app.db import SessionLocal
+from pipeline.agent_orchestrator import run_adaptive_orchestration
 from pipeline.cluster import run_clustering
 from pipeline.fetch_content import run_backfill_story_images, run_fetch
 from pipeline.gdelt_doc import active_countries, poll_countries
@@ -37,6 +38,7 @@ def poll_active_countries() -> dict:
 
 
 def hourly() -> None:
+    print("adaptive_orchestrator:", run_adaptive_orchestration())
     print(poll_active_countries())
     print(run_fetch())  # full text first so NLP works on content, not titles
     print(run_backfill_story_images())  # keep filling in story thumbnails

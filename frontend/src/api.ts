@@ -12,6 +12,7 @@ export function decodeEntities(text: string): string {
 export type StoryCard = {
   id: number;
   title: string;
+  agent_headline?: string | null;
   status: "active" | "fading" | "dead";
   first_seen: string;
   last_seen: string;
@@ -50,11 +51,20 @@ export type ArticleOut = {
   bias_confidence: number | null;
 };
 
+export type StoryMilestone = {
+  date?: string;
+  event?: string;
+  narrative_shift?: string;
+};
+
 export type StoryArc = {
   id: number;
   title: string;
+  agent_headline?: string | null;
   status: string;
   summary: string | null;
+  coherence_score?: number | null;
+  milestones?: StoryMilestone[] | null;
   metrics: DailyMetric[];
   forecast: { day: string; predicted_count: number }[];
   articles: ArticleOut[];

@@ -82,7 +82,7 @@ export default function Feed() {
                     color: s.status === "dead" ? "var(--status-dead)" : "var(--ink)",
                   }}
                 >
-                  {decodeEntities(s.title)}
+                  {decodeEntities(s.agent_headline || s.title)}
                 </h2>
                 <div style={{ opacity: s.status === "dead" ? 0.7 : 1 }}>
                   <LeanBar left={s.bias_left_share} center={s.bias_center_share} right={s.bias_right_share} />

@@ -96,6 +96,7 @@ if _frontend_origins:
 class StoryCard(BaseModel):
     id: int
     title: str
+    agent_headline: str | None = None
     status: str
     first_seen: date
     last_seen: date
@@ -135,15 +136,22 @@ class ForecastDay(BaseModel):
     predicted_count: int  # integer: you cannot publish a fraction of an article
 
 
-class StoryArc(BaseModel):
+class StoryDetail(BaseModel):
     id: int
     title: str
+    agent_headline: str | None = None
     status: str
     summary: str | None
-    metrics: list[DailyMetric]
-    forecast: list[ForecastDay]
-    articles: list[ArticleOut]
+    coherence_score: float | None = None
+    milestones: list | None = None
+    metrics: list[DailyMetric] = []
+    forecast: list[ForecastDay] = []
+    articles: list[ArticleOut] = []
     death_risk: float | None = None  # P(story dies within 30 days); null = model not trained yet
+
+
+class StoryArc(StoryDetail):
+    pass
 
 
 class OutletRow(BaseModel):
@@ -304,6 +312,7 @@ def list_countries(db: Session = Depends(get_db)):
 
 
 @app.get("/api/stories", response_model=list[StoryCard])
+@app.get("/api/feed", response_model=list[StoryCard])
 def list_stories(
     status: str | None = None,
     source_country: str | None = None,
@@ -312,7 +321,15 @@ def list_stories(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    q = select(Story.id, Story.title, Story.status, Story.first_seen, Story.last_seen, Story.category)
+    q = select(
+        Story.id,
+        Story.title,
+        Story.agent_headline,
+        Story.status,
+        Story.first_seen,
+        Story.last_seen,
+        Story.category,
+    )
     if status:
         q = q.where(Story.status == status)
     if source_country:
@@ -334,6 +351,7 @@ def list_stories(
             StoryCard(
                 id=s.id,
                 title=s.title,
+                agent_headline=s.agent_headline or s.title,
                 status=s.status,
                 first_seen=s.first_seen.date(),
                 last_seen=s.last_seen.date(),
@@ -351,6 +369,9 @@ def list_stories(
     # today's story counts; move the sort/limit into SQL if this endpoint
     # becomes a bottleneck.
     return cards[offset : offset + limit]
+
+
+feed = list_stories
 
 
 class ForYouCard(StoryCard):
@@ -442,6 +463,7 @@ def for_you(
     q = select(
         Story.id,
         Story.title,
+        Story.agent_headline,
         Story.status,
         Story.first_seen,
         Story.last_seen,
@@ -488,6 +510,7 @@ def for_you(
         card = StoryCard(
             id=s.id,
             title=s.title,
+            agent_headline=s.agent_headline or s.title,
             status=s.status,
             first_seen=s.first_seen.date(),
             last_seen=s.last_seen.date(),
@@ -602,15 +625,10 @@ def story_feedback(
     return {"ok": True}
 
 
-@app.get("/api/stories/{story_id}/arc", response_model=StoryArc)
-def story_arc(story_id: int, db: Session = Depends(get_db)):
+def _serialize_story_detail(story: Story) -> StoryDetail:
     from datetime import timedelta
-
     from pipeline.metrics import forecast_volume
 
-    story = db.get(Story, story_id)
-    if not story:
-        raise HTTPException(404, "story not found")
     metrics = sorted(story.daily_metrics, key=lambda m: m.day)
     articles = sorted(story.articles, key=lambda a: a.published_at)
 
@@ -621,16 +639,32 @@ def story_arc(story_id: int, db: Session = Depends(get_db)):
         for i, p in enumerate(predicted)
     ]
 
-    return StoryArc(
+    return StoryDetail(
         id=story.id,
         title=story.title,
+        agent_headline=story.agent_headline or story.title,
         status=story.status,
         summary=story.summary,
+        coherence_score=story.coherence_score,
+        milestones=story.milestones or [],
         death_risk=story.death_risk,
         metrics=[DailyMetric.model_validate(m, from_attributes=True) for m in metrics],
         forecast=forecast,
         articles=[_article_out(a) for a in articles],
     )
+
+
+@app.get("/api/stories/{story_id}", response_model=StoryDetail)
+def get_story(story_id: int, db: Session = Depends(get_db)):
+    story = db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "story not found")
+    return _serialize_story_detail(story)
+
+
+@app.get("/api/stories/{story_id}/arc", response_model=StoryDetail)
+def story_arc(story_id: int, db: Session = Depends(get_db)):
+    return get_story(story_id, db)
 
 
 @app.get("/api/stories/{story_id}/outlets", response_model=list[OutletRow])

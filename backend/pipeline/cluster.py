@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.cache import bump_foryou_version, delete_key, umap_key
 from app.db import SessionLocal
 from app.models import Article, Story
+from pipeline.agent_curator import curate_touched_stories
 
 WINDOW_DAYS = 3
 MIN_CLUSTER_SIZE = 3
@@ -92,6 +93,9 @@ def run_clustering(session: Session, window_days: int = WINDOW_DAYS) -> dict:
 
     session.commit()
 
+    # Audit and generate synthetic headlines for all touched story clusters
+    curated = curate_touched_stories(session, touched_story_ids)
+
     # New stories were created - invalidate all ForYou caches so users see
     # them on next load instead of waiting for the TTL to expire.
     if created:
@@ -103,7 +107,12 @@ def run_clustering(session: Session, window_days: int = WINDOW_DAYS) -> dict:
     for story_id in touched_story_ids:
         delete_key(umap_key(story_id))
 
-    return {"articles": len(articles), "stories_created": created, "assigned": assigned}
+    return {
+        "articles": len(articles),
+        "stories_created": created,
+        "assigned": assigned,
+        "curated": curated,
+    }
 
 
 if __name__ == "__main__":

@@ -55,6 +55,9 @@ class Story(Base):
     # ISO-2 codes mentioned by >=30% of this story's articles (pipeline/metrics.py);
     # separate from any article's outlet.country (published-from vs. about)
     about_countries: Mapped[list | None] = mapped_column(JSONB)
+    agent_headline: Mapped[str | None] = mapped_column(Text)
+    coherence_score: Mapped[float | None] = mapped_column(Float)
+    milestones: Mapped[list | None] = mapped_column(JSONB)
 
     articles: Mapped[list["Article"]] = relationship(back_populates="story")
     daily_metrics: Mapped[list["StoryDailyMetric"]] = relationship(

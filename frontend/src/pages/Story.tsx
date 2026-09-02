@@ -154,13 +154,24 @@ export default function Story() {
             ← ALL STORIES
           </Link>
           <h1 style={{ ...serif, fontSize: 26, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.01em", color: "var(--ink)" }}>
-            {decodeEntities(arc.title)}
+            {decodeEntities(arc.agent_headline || arc.title)}
           </h1>
+          {arc.agent_headline && arc.agent_headline !== arc.title && (
+            <p style={{ ...mono, fontSize: 11, color: "var(--ink-muted)" }}>
+              RAW SOURCE TITLE: {decodeEntities(arc.title)}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2" style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
             <span className="h-[7px] w-[7px] rounded-full" style={{ background: statusVar(arc.status) }} />
             <span style={{ color: statusVar(arc.status), fontWeight: 600 }}>{arc.status.toUpperCase()}</span>
             <span>·</span>
             <span>{arc.articles.length} ARTICLES</span>
+            {arc.coherence_score !== undefined && arc.coherence_score !== null && (
+              <>
+                <span>·</span>
+                <span title="Agent cluster semantic coherence score">COHERENCE {Math.round(arc.coherence_score * 100)}%</span>
+              </>
+            )}
             {outlets && (
               <>
                 <span>·</span>
@@ -185,6 +196,28 @@ export default function Story() {
 
         <div className="flex flex-col gap-4">
           <StorySummary storyId={id} initial={arc.summary} />
+
+          {arc.milestones && arc.milestones.length > 0 && (
+            <Panel title="Narrative Evolution — Timeline Milestones" hint="AGENT TRACKED">
+              <div className="flex flex-col gap-3 py-1">
+                {arc.milestones.map((m, idx) => (
+                  <div key={idx} className="flex flex-col gap-1 border-l-2 border-[var(--border)] pl-3">
+                    <div className="flex items-center gap-2" style={{ ...mono, fontSize: 11, color: "var(--ink-muted)" }}>
+                      <span>{m.date || "Timeline Event"}</span>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>
+                      {m.event}
+                    </div>
+                    {m.narrative_shift && (
+                      <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>
+                        {m.narrative_shift}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           <Panel title={`The coverage — ${arc.articles.length} articles`} hint="NEWEST FIRST">
             <ul className="flex flex-col">
