@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import Article, Outlet
-from pipeline.agent_llm import call_pipeline_llm
+from pipeline.agent_llm import call_pipeline_llm, parse_llm_json
 from pipeline.country_codes import COUNTRY_NAMES
 from pipeline.gdelt_doc import poll_countries
 
@@ -128,24 +128,6 @@ def analyze_velocity(
     return clear_spikes, ambiguous_signals
 
 
-def _parse_llm_json(response_text: str) -> dict[str, Any]:
-    """Extract and parse JSON object from LLM response text."""
-    # Strip markdown code fences if present
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response_text, re.DOTALL)
-    if match:
-        raw_json = match.group(1)
-    else:
-        # Try to find the outermost curly braces
-        start = response_text.find("{")
-        end = response_text.rfind("}")
-        if start != -1 and end != -1:
-            raw_json = response_text[start : end + 1]
-        else:
-            raw_json = response_text
-
-    return json.loads(raw_json)
-
-
 def prioritize_with_llm(
     clear_spikes: list[dict[str, Any]],
     ambiguous_signals: list[dict[str, Any]],
@@ -183,7 +165,7 @@ Respond strictly in valid JSON format:
 
     try:
         raw_resp = call_pipeline_llm(prompt, system=system, json_mode=True)
-        data = _parse_llm_json(raw_resp)
+        data = parse_llm_json(raw_resp)
         prioritized = data.get("prioritized_countries", [])
         if isinstance(prioritized, list):
             valid = [

@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Article, Story, StoryDailyMetric
-from pipeline.agent_llm import call_pipeline_llm
+from pipeline.agent_llm import call_pipeline_llm, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -34,20 +34,6 @@ Respond with valid JSON only matching the schema:
   "event": "Concise 1-sentence description of the key factual event or catalyst.",
   "narrative_shift": "Concise 1-sentence description of how media framing, focus, or tone changed."
 }"""
-
-
-def _parse_llm_json(raw: str) -> dict[str, Any]:
-    """Extract and parse JSON from an LLM response string."""
-    text = raw.strip()
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        text = match.group(1)
-    else:
-        brace_start = text.find("{")
-        brace_end = text.rfind("}")
-        if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
-            text = text[brace_start : brace_end + 1]
-    return json.loads(text)
 
 
 def summarize_milestone_with_llm(
@@ -68,7 +54,7 @@ def summarize_milestone_with_llm(
             system=NARRATIVE_SYSTEM_PROMPT,
             json_mode=True,
         )
-        data = _parse_llm_json(raw_output)
+        data = parse_llm_json(raw_output)
         event = str(data.get("event", "")).strip()
         shift = str(data.get("narrative_shift", "")).strip()
         if not event or not shift:

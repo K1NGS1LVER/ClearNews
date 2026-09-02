@@ -11,13 +11,11 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urlsplit
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Article, Story
-from pipeline.agent_llm import call_pipeline_llm
+from pipeline.agent_llm import call_pipeline_llm, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -29,20 +27,6 @@ Your task is to audit an automated cluster of news articles and generate:
 
 Respond with valid JSON only matching the schema:
 {"headline": string, "coherence_score": float, "summary": string}"""
-
-
-def _parse_llm_json(raw: str) -> dict[str, Any]:
-    """Extract and parse JSON from an LLM response string."""
-    text = raw.strip()
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        text = match.group(1)
-    else:
-        brace_start = text.find("{")
-        brace_end = text.rfind("}")
-        if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
-            text = text[brace_start : brace_end + 1]
-    return json.loads(text)
 
 
 def build_curator_prompt(articles: list[dict[str, Any]]) -> str:
@@ -112,7 +96,7 @@ def audit_cluster(articles: list[dict[str, Any]], fallback_title: str | None = N
     try:
         prompt = build_curator_prompt(articles)
         raw_output = call_pipeline_llm(prompt=prompt, system=CURATOR_SYSTEM_PROMPT, json_mode=True)
-        data = _parse_llm_json(raw_output)
+        data = parse_llm_json(raw_output)
 
         headline = str(data.get("headline", "")).strip()
         if not headline:

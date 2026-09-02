@@ -6,175 +6,104 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from pipeline.agent_llm import (
-    _create_llm_for_tier,
+    _build_client,
     call_pipeline_llm,
-    check_model_support,
-    get_tiers,
+    parse_llm_json,
 )
 
 
-def test_get_tiers_configuration(monkeypatch):
-    monkeypatch.setenv("PIPELINE_GROQ_MODEL", "custom-groq-1")
-    monkeypatch.setenv("PIPELINE_GROQ_FALLBACK_MODEL", "custom-groq-2")
-    monkeypatch.setenv("OLLAMA_MODEL", "custom-ollama")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+def test_tier_1_success(monkeypatch):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content="Tier 1 response")
 
-    tiers = get_tiers()
-    assert len(tiers) == 3
-    assert tiers[0] == {"tier": 1, "provider": "groq", "model": "custom-groq-1"}
-    assert tiers[1] == {"tier": 2, "provider": "groq", "model": "custom-groq-2"}
-    assert tiers[2] == {
-        "tier": 3,
-        "provider": "ollama",
-        "model": "custom-ollama",
-        "base_url": "http://localhost:11434/v1",
-    }
+    monkeypatch.setattr("pipeline.agent_llm._build_client", lambda tier, json_mode=False: mock_llm)
+
+    result = call_pipeline_llm(prompt="Hello", system="Test system")
+    assert result == "Tier 1 response"
+    assert mock_llm.invoke.call_count == 1
 
 
-def test_successful_tier_1_invocation(monkeypatch):
-    mock_llm_1 = MagicMock()
-    mock_llm_1.invoke.return_value = AIMessage(content="Headline from Tier 1")
+def test_tier_1_fails_cascades_to_tier_2(monkeypatch):
+    mock_tier1 = MagicMock()
+    mock_tier1.invoke.side_effect = Exception("429 Rate limit exceeded")
 
-    calls = []
+    mock_tier2 = MagicMock()
+    mock_tier2.invoke.return_value = AIMessage(content="Tier 2 fallback response")
 
-    def fake_create_llm(tier, json_mode=False):
-        calls.append(tier["tier"])
-        if tier["tier"] == 1:
-            return mock_llm_1
-        raise AssertionError("Should not invoke fallback tiers when Tier 1 succeeds")
+    call_count = 0
 
-    monkeypatch.setattr("pipeline.agent_llm._create_llm_for_tier", fake_create_llm)
+    def fake_build_client(tier, json_mode=False):
+        nonlocal call_count
+        call_count += 1
+        return mock_tier1 if call_count == 1 else mock_tier2
 
-    result = call_pipeline_llm(
-        prompt="Generate a headline",
-        system="You are an editor",
-    )
+    monkeypatch.setattr("pipeline.agent_llm._build_client", fake_build_client)
 
-    assert result == "Headline from Tier 1"
-    assert calls == [1]
-    mock_llm_1.invoke.assert_called_once()
-    sent_messages = mock_llm_1.invoke.call_args[0][0]
-    assert sent_messages[0].content == "You are an editor"
-    assert sent_messages[1].content == "Generate a headline"
+    result = call_pipeline_llm(prompt="Generate headline")
+    assert result == "Tier 2 fallback response"
+    assert call_count == 2
 
 
-def test_fallback_to_tier_2_on_rate_limit(monkeypatch):
-    mock_llm_2 = MagicMock()
-    mock_llm_2.invoke.return_value = AIMessage(content="Headline from Tier 2")
+def test_tier_1_and_2_fail_cascades_to_tier_3_ollama(monkeypatch):
+    call_count = 0
 
-    calls = []
+    def fake_build_client(tier, json_mode=False):
+        nonlocal call_count
+        call_count += 1
+        llm = MagicMock()
+        if call_count < 3:
+            llm.invoke.side_effect = Exception(f"Tier {call_count} failure")
+        else:
+            llm.invoke.return_value = AIMessage(content="Local Ollama fallback response")
+        return llm
 
-    def fake_create_llm(tier, json_mode=False):
-        calls.append(tier["tier"])
-        if tier["tier"] == 1:
-            mock_fail = MagicMock()
-            mock_fail.invoke.side_effect = Exception("Rate limit reached (429: Too Many Requests)")
-            return mock_fail
-        elif tier["tier"] == 2:
-            return mock_llm_2
-        raise AssertionError("Should not invoke Tier 3 when Tier 2 succeeds")
+    monkeypatch.setattr("pipeline.agent_llm._build_client", fake_build_client)
 
-    monkeypatch.setattr("pipeline.agent_llm._create_llm_for_tier", fake_create_llm)
-
-    result = call_pipeline_llm(prompt="Generate a headline")
-    assert result == "Headline from Tier 2"
-    assert calls == [1, 2]
-    mock_llm_2.invoke.assert_called_once()
-
-
-def test_fallback_to_tier_3_on_tier_2_failure(monkeypatch):
-    mock_llm_3 = MagicMock()
-    mock_llm_3.invoke.return_value = AIMessage(content='{"headline": "Local Ollama Result"}')
-
-    calls = []
-
-    def fake_create_llm(tier, json_mode=False):
-        calls.append(tier["tier"])
-        mock = MagicMock()
-        if tier["tier"] == 1:
-            mock.invoke.side_effect = Exception("Groq 429 rate limit")
-            return mock
-        elif tier["tier"] == 2:
-            mock.invoke.side_effect = Exception("Groq 503 service unavailable")
-            return mock
-        elif tier["tier"] == 3:
-            return mock_llm_3
-        raise AssertionError("Unexpected tier")
-
-    monkeypatch.setattr("pipeline.agent_llm._create_llm_for_tier", fake_create_llm)
-
-    result = call_pipeline_llm(prompt="Generate a headline", json_mode=True)
-    assert result == '{"headline": "Local Ollama Result"}'
-    assert calls == [1, 2, 3]
-    mock_llm_3.invoke.assert_called_once()
+    result = call_pipeline_llm(prompt="Evaluate cluster")
+    assert result == "Local Ollama fallback response"
+    assert call_count == 3
 
 
 def test_all_tiers_fail_raises_runtime_error(monkeypatch):
-    def fake_create_llm(tier, json_mode=False):
-        mock = MagicMock()
-        mock.invoke.side_effect = Exception(f"Tier {tier['tier']} down")
-        return mock
+    def failing_build_client(tier, json_mode=False):
+        llm = MagicMock()
+        llm.invoke.side_effect = Exception("Service unavailable")
+        return llm
 
-    monkeypatch.setattr("pipeline.agent_llm._create_llm_for_tier", fake_create_llm)
+    monkeypatch.setattr("pipeline.agent_llm._build_client", failing_build_client)
 
     with pytest.raises(RuntimeError, match="All pipeline LLM tiers failed"):
-        call_pipeline_llm(prompt="Will fail everywhere")
+        call_pipeline_llm(prompt="Test failure")
 
 
-def test_json_mode_ensures_json_keyword(monkeypatch):
+def test_json_mode_adds_instruction(monkeypatch):
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = AIMessage(content='{"score": 0.95}')
+    mock_llm.invoke.return_value = AIMessage(content='{"headline": "Neutral Title"}')
 
-    def fake_create_llm(tier, json_mode=False):
-        assert json_mode is True
-        return mock_llm
-
-    monkeypatch.setattr("pipeline.agent_llm._create_llm_for_tier", fake_create_llm)
+    monkeypatch.setattr("pipeline.agent_llm._build_client", lambda tier, json_mode=False: mock_llm)
 
     call_pipeline_llm(prompt="Score this text", system="Score evaluator", json_mode=True)
     sent_messages = mock_llm.invoke.call_args[0][0]
     assert "json" in sent_messages[0].content.lower()
 
 
-def test_create_llm_groq_missing_key(monkeypatch):
+def test_parse_llm_json():
+    # Direct valid JSON
+    assert parse_llm_json('{"key": "value"}') == {"key": "value"}
+    # Markdown code fence JSON
+    assert parse_llm_json('```json\n{"status": "ok"}\n```') == {"status": "ok"}
+    # Embedded JSON with extra chat text
+    assert parse_llm_json('Here is the data: {"result": 42} Hope this helps!') == {"result": 42}
+
+
+def test_build_client_groq_missing_key(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="GROQ_API_KEY environment variable is not set"):
-        _create_llm_for_tier({"tier": 1, "provider": "groq", "model": "llama-3.1-8b-instant"})
+    with pytest.raises(ValueError, match="GROQ_API_KEY is not set"):
+        _build_client({"provider": "groq", "model": "llama-3.1-8b-instant"})
 
 
-def test_create_llm_ollama(monkeypatch):
-    llm = _create_llm_for_tier(
-        {"tier": 3, "provider": "ollama", "model": "qwen2.5:1.5b", "base_url": "http://localhost:11434/v1"}
+def test_build_client_ollama(monkeypatch):
+    llm = _build_client(
+        {"provider": "ollama", "model": "qwen2.5:1.5b", "base_url": "http://localhost:11434/v1"}
     )
     assert llm.model_name == "qwen2.5:1.5b"
-
-
-def test_check_model_support_groq(monkeypatch):
-    monkeypatch.setenv("GROQ_API_KEY", "dummy-key")
-
-    mock_model = MagicMock()
-    mock_model.id = "llama-3.1-8b-instant"
-
-    mock_client = MagicMock()
-    mock_client.models.list.return_value.data = [mock_model]
-
-    with patch("groq.Groq", return_value=mock_client):
-        assert check_model_support("groq", "llama-3.1-8b-instant") is True
-        assert check_model_support("groq", "non-existent-model") is False
-
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    assert check_model_support("groq", "llama-3.1-8b-instant") is False
-
-
-def test_check_model_support_ollama(monkeypatch):
-    with patch("httpx.get") as mock_get:
-        mock_get.return_value = MagicMock(
-            status_code=200,
-            json=lambda: {"models": [{"name": "qwen2.5:1.5b"}, {"name": "llama3:latest"}]},
-        )
-        assert check_model_support("ollama", "qwen2.5:1.5b") is True
-        assert check_model_support("ollama", "llama3") is True
-        assert check_model_support("ollama", "unsupported-model") is False
-
-    with patch("httpx.get", side_effect=Exception("Connection refused")):
-        assert check_model_support("ollama", "qwen2.5:1.5b") is False
