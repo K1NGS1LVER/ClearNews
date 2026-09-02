@@ -136,4 +136,114 @@ test.describe("Chat - /chat", () => {
 
     await expect(page.getByRole("heading", { name: "Ask about the archive" })).toBeVisible();
   });
+
+  test("chat empty state displays suggested question pills and trending story cards", async ({ page }) => {
+    await page.route("**/api/stories*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 101,
+            title: "Global Climate Summit Reaches Landmark Accord",
+            agent_headline: "Climate Summit Leaders Agree on Emission Targets",
+            status: "active",
+            first_seen: "2026-08-30T00:00:00Z",
+            last_seen: "2026-09-02T00:00:00Z",
+            article_count: 45,
+            bias_left_share: 0.35,
+            bias_center_share: 0.4,
+            bias_right_share: 0.25,
+            daily_counts: [5, 10, 15, 15],
+            image_url: null,
+          },
+        ]),
+      })
+    );
+
+    await page.goto("/chat");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("ask-empty-state")).toBeVisible();
+    await expect(page.getByTestId("suggested-questions-section")).toBeVisible();
+    await expect(page.getByTestId("suggested-question-pill").first()).toBeVisible();
+    await expect(page.getByTestId("trending-stories-section")).toBeVisible();
+    await expect(page.getByTestId("trending-story-card").first()).toContainText(
+      "Climate Summit Leaders Agree on Emission Targets"
+    );
+  });
+
+  test("clicking a suggested question pill sends the query and hides empty state", async ({ page }) => {
+    await page.route("**/api/chat/sessions", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 1 }) })
+    );
+    let sentContent = "";
+    await page.route("**/api/chat", async (route) => {
+      const data = route.request().postDataJSON();
+      sentContent = data?.content ?? "";
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'data: {"type":"token","content":"Test assistant reply."}\n\ndata: {"type":"done"}\n\n',
+      });
+    });
+
+    await page.goto("/chat");
+    await page.waitForLoadState("networkidle");
+
+    const pill = page.getByTestId("suggested-question-pill").first();
+    await pill.click();
+
+    await expect.poll(() => sentContent).toContain("Which stories show the biggest divergence");
+    await expect(page.getByTestId("ask-empty-state")).not.toBeVisible();
+    await expect(page.locator("text=Test assistant reply.")).toBeVisible();
+  });
+
+  test("clicking a trending story card sends an exploratory query for that story", async ({ page }) => {
+    await page.route("**/api/stories*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 101,
+            title: "Global Climate Summit Reaches Landmark Accord",
+            agent_headline: "Climate Summit Leaders Agree on Emission Targets",
+            status: "active",
+            first_seen: "2026-08-30T00:00:00Z",
+            last_seen: "2026-09-02T00:00:00Z",
+            article_count: 45,
+            bias_left_share: 0.35,
+            bias_center_share: 0.4,
+            bias_right_share: 0.25,
+            daily_counts: [5, 10, 15, 15],
+            image_url: null,
+          },
+        ]),
+      })
+    );
+    await page.route("**/api/chat/sessions", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 1 }) })
+    );
+    let sentContent = "";
+    await page.route("**/api/chat", async (route) => {
+      const data = route.request().postDataJSON();
+      sentContent = data?.content ?? "";
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'data: {"type":"token","content":"Coverage is split between economic feasibility and ecological targets."}\n\ndata: {"type":"done"}\n\n',
+      });
+    });
+
+    await page.goto("/chat");
+    await page.waitForLoadState("networkidle");
+
+    const card = page.getByTestId("trending-story-card").first();
+    await card.click();
+
+    await expect.poll(() => sentContent).toContain("Climate Summit Leaders Agree on Emission Targets");
+    await expect(page.getByTestId("ask-empty-state")).not.toBeVisible();
+    await expect(page.locator("text=Coverage is split between economic feasibility")).toBeVisible();
+  });
 });
