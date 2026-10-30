@@ -30,12 +30,14 @@ const baseNavItems = [
 const forYouItem = { to: "/foryou", label: "For You", icon: "★", end: false };
 
 const pillStyle = ({ isActive }: { isActive: boolean }) => ({
-  padding: "5px 11px",
-  borderRadius: 8,
-  fontWeight: isActive ? 600 : 400,
+  padding: "6px 13px",
+  borderRadius: 10,
+  fontWeight: isActive ? 600 : 500,
+  fontSize: 14,
   background: isActive ? "var(--navpill)" : "transparent",
   color: isActive ? "var(--navpill-ink)" : "var(--ink-2)",
   textDecoration: "none",
+  transition: "all 150ms ease",
 });
 
 function page(name: string, element: ReactNode, resetKey: string) {
@@ -118,13 +120,13 @@ export default function App() {
         <div className="mx-auto flex max-w-4xl items-center gap-4">
           <Link
             to="/"
-            style={{ fontFamily: "var(--font-serif)", fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em", color: "var(--ink)" }}
+            style={{ fontFamily: "var(--font-serif)", fontWeight: 700, fontSize: 21, letterSpacing: "-0.015em", color: "var(--ink)" }}
           >
             ClearNews
           </Link>
           <span
             className="hidden sm:inline"
-            style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}
+            style={{ fontFamily: "var(--font-mono)", fontSize: "9px", letterSpacing: "0.12em", color: "var(--ink-muted)" }}
           >
             LIFECYCLE &amp; DRIFT
           </span>

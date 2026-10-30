@@ -51,8 +51,8 @@ export default function Feed() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 pb-8 pt-2 sm:px-8">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 15, fontWeight: 600, color: "var(--ink-2)" }}>
+      <div className="mb-4 flex items-baseline justify-between">
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: "var(--ink)" }}>
           Tracking {liveCount} live stories
         </h1>
       </div>
@@ -62,12 +62,12 @@ export default function Feed() {
       {showEmptyState && selectedCountry ? (
         <CountryEmptyState countryName={selectedCountry.name} />
       ) : (
-        <div className="flex flex-col gap-3 sm:gap-0 sm:overflow-hidden sm:rounded-[10px] sm:border sm:border-[color:var(--border)]">
+        <div className="flex flex-col gap-3 sm:gap-0 sm:overflow-hidden sm:rounded-xl sm:border sm:border-[color:var(--border)] sm:shadow-[var(--shadow-sm)]">
           {stories?.map((s) => (
             <Link
               key={s.id}
               to={`/story/${s.id}`}
-              className="flex flex-col overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface-1)] shadow-[0_1px_3px_var(--card-shadow)] transition-colors hover:bg-black/[0.02] sm:flex-row sm:items-center sm:gap-[18px] sm:rounded-none sm:border-0 sm:border-t sm:border-t-[color:var(--rowline)] sm:bg-transparent sm:shadow-none sm:first:border-t-0"
+              className="flex flex-col overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface-1)] shadow-[var(--shadow-sm)] transition-all hover:shadow-[var(--shadow-md)] hover:bg-black/[0.01] sm:flex-row sm:items-center sm:gap-[18px] sm:rounded-none sm:border-0 sm:border-t sm:border-t-[color:var(--rowline)] sm:bg-transparent sm:shadow-none sm:hover:bg-black/[0.01] sm:hover:shadow-none sm:first:border-t-0"
             >
               <Thumb src={s.image_url} title={decodeEntities(s.title)} dead={s.status === "dead"} />
               <div className="min-w-0 flex-1 flex flex-col gap-1.5 p-3.5 sm:p-0 sm:py-3.5 sm:pr-5">

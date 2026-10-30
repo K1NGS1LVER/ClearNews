@@ -138,17 +138,17 @@ function Hero() {
         <span style={{ ...mono, fontSize: 11, letterSpacing: "0.14em", color: "var(--ink-muted)" }}>
           NEWS, TRACKED OVER ITS WHOLE LIFE
         </span>
-        <h1 style={{ ...serif, fontSize: "clamp(42px,5vw,62px)", fontWeight: 700, lineHeight: 1.04, letterSpacing: "-0.02em" }}>
+        <h1 style={{ ...serif, fontSize: "clamp(44px,5.5vw,68px)", fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.025em" }}>
           Every story has a life. Read it whole.
         </h1>
-        <p className="max-w-[480px]" style={{ fontSize: 17, lineHeight: 1.6, color: "var(--ink-2)" }}>
+        <p className="max-w-[520px]" style={{ fontSize: 18, lineHeight: 1.7, color: "var(--ink-2)" }}>
           A headline is one frame of a moving picture. ClearNews follows coverage across 2,000+ outlets — how a
           story is born, how its framing drifts left or right, and when it quietly dies — updated every 15 minutes.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Link
             to="/stories"
-            className="inline-flex h-11 items-center rounded-lg px-[22px] text-[15px] font-semibold transition-opacity duration-150 hover:opacity-85 active:scale-[0.97]"
+            className="inline-flex h-12 items-center rounded-xl px-[26px] text-[15px] font-semibold transition-all duration-150 hover:opacity-90 active:scale-[0.98] shadow-[var(--shadow-sm)]"
             style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
           >
             Start reading
