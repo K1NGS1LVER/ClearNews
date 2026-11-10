@@ -9,9 +9,28 @@ import { LeanBar, MetaLine, Thumb } from "../components/StoryBits";
 import StoryMenu from "../components/StoryMenu";
 import FilterBar, { CountryEmptyState } from "../components/FilterBar";
 import { DEFAULT_FILTERS, type Filters } from "../lib/filters";
+import { useUrlState } from "../hooks/useUrlState";
+import { useScrollRestoration } from "../hooks/usePageState";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
-const serif = { fontFamily: "var(--font-serif)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const display = { fontFamily: "var(--font-display)" } as const;
+
+function serializeFilters(filters: Filters): string {
+  return JSON.stringify(filters);
+}
+
+function deserializeFilters(value: string): Filters {
+  try {
+    const parsed = JSON.parse(value);
+    return {
+      country: parsed.country ?? null,
+      mode: parsed.mode ?? "source",
+      status: parsed.status ?? "active",
+    };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
 
 const breakpoints = [
   { query: "(min-width: 1024px)", columns: 3 },
@@ -38,7 +57,7 @@ function useColumns() {
 function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
   const isDead = card.status === "dead";
   const shell =
-    "flex flex-col overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface-1)] shadow-[0_1px_3px_var(--card-shadow)] transition-colors hover:bg-black/[0.02]";
+    "flex flex-col overflow-hidden rounded-lg border border-[color:var(--color-rule)] bg-[var(--color-paper)] shadow-sm transition-all duration-200 ease-out";
 
   const menu = (
     <div className="absolute right-2.5 top-2.5 z-[1]">
@@ -50,11 +69,24 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
     return (
       <div className="relative">
         {menu}
-        <Link to={`/story/${card.id}`} className={`${shell} gap-1.5 p-3.5`}>
+        <Link
+          to={`/story/${card.id}`}
+          className={`${shell} gap-1.5 p-3.5`}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "translateY(-4px)";
+            e.currentTarget.style.boxShadow = "var(--shadow-lift)";
+            e.currentTarget.style.borderColor = "var(--color-accent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "var(--shadow-card)";
+            e.currentTarget.style.borderColor = "var(--color-rule)";
+          }}
+        >
           <MetaLine s={card} />
           <h2
             className="truncate pr-6"
-            style={{ ...serif, fontSize: 15.5, fontWeight: 600, lineHeight: 1.3, color: isDead ? "var(--status-dead)" : "var(--ink)" }}
+            style={{ ...display, fontSize: "var(--text-base)", fontWeight: 600, lineHeight: 1.3, color: isDead ? "var(--status-dead)" : "var(--color-ink)" }}
           >
             {decodeEntities(card.title)}
           </h2>
@@ -67,11 +99,24 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
     return (
       <div className="relative">
         {menu}
-        <Link to={`/story/${card.id}`} className={`${shell} gap-2`}>
-          <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[120px] w-full shrink-0 object-cover" />
-          <div className="flex flex-col gap-1.5 p-3.5">
+        <Link
+          to={`/story/${card.id}`}
+          className={`${shell} gap-2`}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "translateY(-4px)";
+            e.currentTarget.style.boxShadow = "var(--shadow-lift)";
+            e.currentTarget.style.borderColor = "var(--color-accent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "var(--shadow-card)";
+            e.currentTarget.style.borderColor = "var(--color-rule)";
+          }}
+        >
+          <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[90px] w-full shrink-0 object-cover" />
+          <div className="flex flex-col gap-1.5 p-3">
             <MetaLine s={card} />
-            <h2 style={{ ...serif, fontSize: 18, fontWeight: 600, lineHeight: 1.25, color: isDead ? "var(--status-dead)" : "var(--ink)" }}>
+            <h2 style={{ ...display, fontSize: "var(--text-base)", fontWeight: 600, lineHeight: 1.25, color: isDead ? "var(--status-dead)" : "var(--color-ink)" }}>
               {decodeEntities(card.title)}
             </h2>
             <div style={{ opacity: isDead ? 0.7 : 1 }}>
@@ -87,21 +132,34 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
   return (
     <div className="relative">
       {menu}
-      <Link to={`/story/${card.id}`} className={`${shell} gap-2.5`}>
-        <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[180px] w-full shrink-0 object-cover" />
+      <Link
+        to={`/story/${card.id}`}
+        className={`${shell} gap-2`}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-4px)";
+          e.currentTarget.style.boxShadow = "var(--shadow-lift)";
+          e.currentTarget.style.borderColor = "var(--color-accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "var(--shadow-card)";
+          e.currentTarget.style.borderColor = "var(--color-rule)";
+        }}
+      >
+        <Thumb src={card.image_url} title={decodeEntities(card.title)} dead={isDead} className="h-[140px] w-full shrink-0 object-cover" />
         <div className="flex flex-col gap-2 p-4">
           <div className="flex items-center gap-2">
             {card.category && (
               <span
-                className="rounded px-2 py-0.5 text-[9px] font-semibold uppercase"
-                style={{ ...mono, letterSpacing: "0.08em", background: "var(--chip-center-bg)", color: "var(--chip-center-ink)" }}
+                className="rounded-md px-2 py-0.5 text-[9px] font-semibold uppercase"
+                style={{ ...mono, letterSpacing: "0.08em", background: "var(--chip-center-bg)", color: "var(--chip-center-ink)", borderRadius: "var(--radius-input)" }}
               >
                 {card.category.replace("_", " ")}
               </span>
             )}
             <MetaLine s={card} />
           </div>
-          <h2 style={{ ...serif, fontSize: 22, fontWeight: 700, lineHeight: 1.22, color: isDead ? "var(--status-dead)" : "var(--ink)" }}>
+          <h2 style={{ ...display, fontSize: "var(--text-lg)", fontWeight: 700, lineHeight: 1.22, color: isDead ? "var(--status-dead)" : "var(--color-ink)" }}>
             {decodeEntities(card.title)}
           </h2>
           <div className="flex items-center justify-between" style={{ opacity: isDead ? 0.7 : 1 }}>
@@ -109,7 +167,7 @@ function Card({ card, onLess }: { card: ForYouCard; onLess: () => void }) {
             <Sparkline counts={card.daily_counts} />
           </div>
           {card.matched.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" style={{ ...mono, fontSize: 9.5, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+            <div className="flex flex-wrap gap-1.5" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
               {card.matched.map((kw) => (
                 <span key={kw}>MATCHED: {kw.toUpperCase()}</span>
               ))}
@@ -125,10 +183,14 @@ export default function ForYou() {
   const { data: me } = useMe();
   const columnCount = useColumns();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useUrlState<Filters>("filters", DEFAULT_FILTERS, {
+    serialize: serializeFilters,
+    deserialize: deserializeFilters,
+  });
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { data: countries } = useQuery({ queryKey: ["countries"], queryFn: fetchCountries });
   const queryKey = ["foryou", filters.country, filters.mode];
+  useScrollRestoration("foryou");
   const { data, isLoading, error } = useQuery({
     queryKey,
     queryFn: () =>
@@ -142,12 +204,11 @@ export default function ForYou() {
 
   function hide(id: number) {
     setHiddenIds((prev) => new Set(prev).add(id));
-    // resync with the server's own "less"-filtered ranking on next load
     queryClient.invalidateQueries({ queryKey: ["foryou"] });
   }
 
   if (isLoading) return <Loading label="Loading your feed…" />;
-  if (error) return <p className="p-8 text-red-700">Failed to load your feed.</p>;
+  if (error) return <p style={{ padding: "var(--space-xl)", color: "var(--bias-right)" }}>Failed to load your feed.</p>;
 
   const selectedCountry = countries?.find((c) => c.code === filters.country);
   const showEmptyState =
@@ -162,31 +223,41 @@ export default function ForYou() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-8 pt-2 sm:px-8">
-      <div className="mb-4 flex items-baseline justify-between">
-        <h1 style={{ ...serif, fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>
-          Good {greeting()}, {me?.display_name ?? "there"}
-        </h1>
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-          RANKED FOR YOU · {cards.length} STORIES
-        </span>
-      </div>
+    <div style={{ minHeight: "100vh", background: "var(--color-paper)", color: "var(--color-ink)" }}>
+      <section style={{ paddingTop: "var(--space-xl)", paddingBottom: "var(--space-lg)" }}>
+        <div className="container" style={{ display: "flex", alignItems: "baseline", justifyContent: "spaceBetween", flexWrap: "wrap", gap: "var(--space-md)" }}>
+          <h1 style={{ ...display, fontSize: "var(--text-section)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--color-ink)" }}>
+            Good {greeting()}, {me?.display_name ?? "there"}
+          </h1>
+          <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
+            RANKED FOR YOU · {cards.length} STORIES
+          </span>
+        </div>
+      </section>
 
-      <FilterBar filters={filters} onChange={setFilters} />
+      <section style={{ paddingBottom: "var(--space-xl)" }}>
+        <div className="container">
+          <FilterBar filters={filters} onChange={setFilters} />
+        </div>
+      </section>
 
-      {showEmptyState && selectedCountry ? (
-        <CountryEmptyState countryName={selectedCountry.name} />
-      ) : (
-        <div className="flex gap-4">
-          {columns.map((col, i) => (
-            <div key={i} className="flex min-w-0 flex-1 flex-col gap-4">
-              {col.map((card) => (
-                <Card key={card.id} card={card} onLess={() => hide(card.id)} />
+      <section style={{ paddingBottom: "var(--section-gap)" }}>
+        <div className="container">
+          {showEmptyState && selectedCountry ? (
+            <CountryEmptyState countryName={selectedCountry.name} />
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${columnCount}, 1fr)`, gap: "var(--gap-columns)" }}>
+              {columns.map((col, i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+                  {col.map((card) => (
+                    <Card key={card.id} card={card} onLess={() => hide(card.id)} />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
+      </section>
     </div>
   );
 }

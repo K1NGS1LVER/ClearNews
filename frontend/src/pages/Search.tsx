@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { decodeEntities, fetchStories, searchStories } from "../api";
 import { LeanBar, MetaLine } from "../components/StoryBits";
+import { useUrlStringState } from "../hooks/useUrlState";
+import { useScrollRestoration } from "../hooks/usePageState";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
-const serif = { fontFamily: "var(--font-serif)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
 
 const chip = (label: string | null) => ({
   background: label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--chip-center-bg)",
@@ -27,9 +28,30 @@ const SUGGESTED_QUERIES = [
   "Trade tariffs, domestic manufacturing & supply chains",
 ];
 
+/* Focus and active state helpers for Hallmark Floor 26a & Reflex 26b */
+const focusStyle = {
+  outline: "2px solid var(--color-focus)",
+  outlineOffset: "2px",
+} as const;
+
+const pressSpringStyle = {
+  transform: "translateY(3px)",
+  transition: "transform var(--dur-micro) var(--ease-out)",
+} as const;
+
+const pressSpringMicroStyle = {
+  transform: "translateY(2px)",
+  transition: "transform var(--dur-micro) var(--ease-out)",
+} as const;
+
 export default function Search() {
   const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useUrlStringState("q", "");
+  useScrollRestoration("search");
+
+  useEffect(() => {
+    setInput(query);
+  }, [query]);
 
   const { data, isFetching } = useQuery({
     queryKey: ["searchStories", query],
@@ -49,192 +71,349 @@ export default function Search() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-8 pt-2 sm:px-8">
-      <form
-        className="mb-5 flex gap-2.5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setQuery(input);
-        }}
-      >
-        <div
-          className="flex flex-1 items-center gap-2.5 rounded-lg px-4 py-2.5"
-          style={{ border: "1.5px solid var(--ink)", background: "var(--surface-1)" }}
-        >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="diplomatic talks that eased oil prices…"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-            style={{ color: "var(--ink)" }}
-          />
-          <span className="hidden shrink-0 sm:inline" style={{ ...mono, fontSize: "9.5px", color: "var(--baseline)" }}>
-            SEMANTIC · MEANING, NOT KEYWORDS
-          </span>
-        </div>
-        <button
-          type="submit"
-          disabled={!input.trim() || isFetching}
-          className="rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
-          style={{ background: "var(--ink)", color: "var(--surface-1)" }}
-        >
-          {isFetching ? "Searching…" : "Search"}
-        </button>
-      </form>
-
-      {/* When no search is active, display curated topics & popular opinions */}
-      {!query && (
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-2.5">
-            <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-              SUGGESTED PERSPECTIVES · MAJOR OPINION DEBATES
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTED_QUERIES.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => handleSearch(suggestion)}
-                  className="cursor-pointer rounded-full border px-3 py-1.5 text-xs transition-colors hover:border-[var(--ink)]"
-                  style={{
-                    borderColor: "var(--hair)",
-                    background: "var(--surface-1)",
-                    color: "var(--ink)",
-                  }}
-                >
-                  <span style={{ color: "var(--baseline)", marginRight: 5 }}>⌕</span>
-                  {suggestion}
-                </button>
-              ))}
+    <div style={{ minHeight: "100vh", background: "var(--color-paper)", color: "var(--color-ink)" }}>
+      <section style={{ paddingTop: "var(--space-xl)", paddingBottom: "var(--space-xl)" }}>
+        <div className="container">
+          <form
+            style={{ display: "flex", gap: "var(--space-md)", marginBottom: "var(--space-2xl)" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              setQuery(input);
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flex: 1,
+                alignItems: "center",
+                gap: "var(--space-md)",
+                padding: "var(--space-sm) var(--space-lg)",
+                borderRadius: "var(--radius-input)",
+                border: "1.5px solid var(--color-ink)",
+                background: "var(--color-paper)",
+              }}
+            >
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="diplomatic talks that eased oil prices…"
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  background: "transparent",
+                  fontSize: "var(--text-sm)",
+                  fontFamily: "var(--font-body)",
+                  color: "var(--color-ink)",
+                  border: "none",
+                  outline: "none",
+                }}
+              />
+              <span style={{ display: "none", ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
+                SEMANTIC · MEANING, NOT KEYWORDS
+              </span>
             </div>
-          </div>
+            <button
+              type="submit"
+              disabled={!input.trim() || isFetching}
+              style={{
+                ...mono,
+                fontSize: "var(--text-sm)",
+                fontWeight: 500,
+                padding: "var(--space-sm) var(--space-xl)",
+                borderRadius: "var(--radius-input)",
+                background: "var(--color-ink)",
+                color: "var(--color-paper)",
+                border: "none",
+                cursor: "pointer",
+                transition: "transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out)",
+                boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
+              }}
+              onMouseDown={(e) => Object.assign(e.currentTarget.style, pressSpringStyle)}
+              onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+              onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+              onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+            >
+              {isFetching ? "Searching…" : "Search"}
+            </button>
+          </form>
 
-          {popularStories && popularStories.length > 0 && (
-            <div className="flex flex-col gap-3 border-t pt-5" style={{ borderColor: "var(--hair)" }}>
-              <div className="flex items-center justify-between">
-                <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-                  POPULAR STORIES ACROSS PERSPECTIVES
+          {/* When no search is active, display curated topics & popular opinions */}
+          {!query && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2xl)" }}>
+              <div>
+                <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.12em", color: "var(--color-accent)", textTransform: "uppercase", display: "block", marginBottom: "var(--space-md)" }}>
+                  SUGGESTED PERSPECTIVES · MAJOR OPINION DEBATES
                 </span>
-                <span className="hidden sm:inline" style={{ ...mono, fontSize: "9.5px", color: "var(--baseline)" }}>
-                  POLITICAL DIVERSITY
-                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+                  {SUGGESTED_QUERIES.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => handleSearch(suggestion)}
+                      style={{
+                        ...mono,
+                        fontSize: "var(--text-sm)",
+                        fontWeight: 500,
+                        padding: "var(--space-xs) var(--space-md)",
+                        borderRadius: "var(--radius-pill)",
+                        border: "1px solid var(--color-rule)",
+                        background: "var(--color-paper)",
+                        color: "var(--color-ink)",
+                        cursor: "pointer",
+                        transition: "transform var(--dur-micro) var(--ease-out), background var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out)",
+                      }}
+                      onMouseDown={(e) => Object.assign(e.currentTarget.style, pressSpringMicroStyle)}
+                      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+                      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+                    >
+                      <span style={{ color: "var(--color-accent)", marginRight: "var(--space-xs)" }}>⌕</span>
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {popularStories.map((story) => (
-                  <div
-                    key={story.id}
-                    className="flex flex-col justify-between gap-3 rounded-lg border p-3.5 transition-colors hover:border-[var(--ink)]"
-                    style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
-                  >
-                    <div className="flex flex-col gap-1.5">
-                      <MetaLine s={story} />
-                      <Link
-                        to={`/story/${story.id}`}
-                        className="line-clamp-2 text-sm font-semibold hover:underline"
-                        style={{ ...serif, color: "var(--ink)" }}
-                      >
-                        {decodeEntities(story.agent_headline || story.title)}
-                      </Link>
-                    </div>
-                    <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: "var(--hair)" }}>
-                      <LeanBar left={story.bias_left_share} center={story.bias_center_share} right={story.bias_right_share} />
-                      <button
-                        type="button"
-                        onClick={() => handleSearch(decodeEntities(story.agent_headline || story.title))}
-                        className="cursor-pointer text-[10px] font-semibold hover:underline"
-                        style={{ ...mono, color: "var(--ink-muted)" }}
-                        title="Search related coverage"
-                      >
-                        SEARCH ⌕
-                      </button>
-                    </div>
+
+              {popularStories && popularStories.length > 0 && (
+                <div style={{ paddingTop: "var(--space-xl)", borderTop: "1px solid var(--color-rule)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-lg)" }}>
+                    <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
+                      POPULAR STORIES ACROSS PERSPECTIVES
+                    </span>
+                    <span style={{ ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
+                      POLITICAL DIVERSITY
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--space-md)" }}>
+                      {popularStories.map((story) => (
+                      <article
+                        key={story.id}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "var(--space-sm)",
+                          padding: "var(--space-lg)",
+                          background: "var(--color-paper)",
+                          border: "1px solid var(--color-rule)",
+                          borderRadius: "var(--radius-card)",
+                          boxShadow: "var(--shadow-card)",
+                          transition: "transform var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out)",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "translateY(-4px)";
+                          e.currentTarget.style.boxShadow = "var(--shadow-lift)";
+                          e.currentTarget.style.borderColor = "var(--color-accent)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateY(0)";
+                          e.currentTarget.style.boxShadow = "var(--shadow-card)";
+                          e.currentTarget.style.borderColor = "var(--color-rule)";
+                        }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                          <MetaLine s={story} />
+                          <Link
+                            to={`/story/${story.id}`}
+                            style={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              fontSize: "var(--text-base)",
+                              fontWeight: 600,
+                              lineHeight: 1.3,
+                              color: "var(--color-ink)",
+                              textDecoration: "none",
+                              transition: "text-decoration var(--dur-micro) var(--ease-out)",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                            onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                            onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+                          >
+                            {decodeEntities(story.agent_headline || story.title)}
+                          </Link>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "var(--space-md)", borderTop: "1px solid var(--color-rule)" }}>
+                          <LeanBar left={story.bias_left_share} center={story.bias_center_share} right={story.bias_right_share} />
+                          <button
+                            type="button"
+                            onClick={() => handleSearch(decodeEntities(story.agent_headline || story.title))}
+                            style={{
+                              ...mono,
+                              fontSize: "var(--text-xs)",
+                              fontWeight: 500,
+                              color: "var(--color-muted)",
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                              textDecorationStyle: "dotted",
+                              transition: "color var(--dur-micro) var(--ease-out)",
+                            }}
+                            title="Search related coverage"
+                            onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                            onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+                          >
+                            SEARCH ⌕
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Search results view */}
-      {data && (
-        <div className="flex items-center justify-between">
-          <span style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-            {data.length} STORY MATCH{data.length === 1 ? "" : "ES"}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setQuery("");
-              setInput("");
-            }}
-            className="cursor-pointer text-xs font-medium hover:underline"
-            style={{ ...mono, color: "var(--ink-muted)" }}
-          >
-            Clear search ✕
-          </button>
-        </div>
-      )}
-      {data && data.length === 0 && (
-        <p className="mt-2 text-sm" style={{ color: "var(--ink-muted)" }}>No matches found for "{query}".</p>
-      )}
-      <div className="mt-3 flex flex-col gap-4">
-        {data?.map((s) => (
-          <section
-            key={s.story_id}
-            className="flex flex-col gap-2.5 rounded-[10px] border p-4"
-            style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Link
-                to={`/story/${s.story_id}`}
-                className="text-[17px] font-semibold hover:underline"
-                style={{ ...serif, color: "var(--ink)" }}
-              >
-                {decodeEntities(s.story_title)}
-              </Link>
-              <div className="flex items-center gap-2" style={{ ...mono, fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-                <span className="h-[7px] w-[7px] rounded-full" style={{ background: statusColor[s.story_status] ?? "var(--ink-muted)" }} />
-                <span style={{ color: statusColor[s.story_status] ?? "var(--ink-muted)", fontWeight: 600 }}>
-                  {s.story_status.toUpperCase()}
-                </span>
-                <span>·</span>
-                <span>{s.article_count} ARTICLES IN STORY</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 border-t pt-2.5" style={{ borderColor: "var(--hair)" }}>
-              <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
-                MATCHED ARTICLES ({s.matched_articles.length})
+          {/* Search results view */}
+          {data && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-lg)" }}>
+              <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
+                {data.length} STORY MATCH{data.length === 1 ? "" : "ES"}
               </span>
-              <ul className="flex flex-col gap-2">
-                {s.matched_articles.slice(0, 3).map((a) => (
-                  <li key={a.id} className="flex flex-col gap-1">
-                    <Link
-                      to={`/article/${a.id}`}
-                      className="text-[13.5px] font-medium hover:underline"
-                      style={{ color: "var(--ink)" }}
-                    >
-                      {a.title ? decodeEntities(a.title) : a.url}
-                    </Link>
-                    <div className="flex flex-wrap items-center gap-2" style={{ ...mono, fontSize: 10, color: "var(--ink-muted)" }}>
-                      <span>{a.outlet} · {a.published_at}</span>
-                      {a.bias_label && (
-                        <>
-                          <span>·</span>
-                          <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase" style={{ letterSpacing: "0.08em", ...chip(a.bias_label) }}>
-                            {a.bias_label}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setInput("");
+                }}
+                style={{
+                  ...mono,
+                  fontSize: "var(--text-xs)",
+                  fontWeight: 500,
+                  color: "var(--color-muted)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  textDecorationStyle: "dotted",
+                  transition: "color var(--dur-micro) var(--ease-out)",
+                }}
+                onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+              >
+                Clear search ✕
+              </button>
             </div>
-          </section>
-        ))}
-      </div>
+          )}
+          {data && data.length === 0 && (
+            <p style={{ marginTop: "var(--space-md)", fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
+              No matches found for "{query}".
+            </p>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-xl)" }}>
+            {data?.map((s) => (
+              <section
+                key={s.story_id}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-sm)",
+                  padding: "var(--space-lg)",
+                  background: "var(--color-paper)",
+                  border: "1px solid var(--color-rule)",
+                  borderRadius: "var(--radius-card)",
+                  boxShadow: "var(--shadow-card)",
+                  transition: "transform var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow = "var(--shadow-lift)";
+                  e.currentTarget.style.borderColor = "var(--color-accent)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "var(--shadow-card)";
+                  e.currentTarget.style.borderColor = "var(--color-rule)";
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-md)" }}>
+                  <Link
+                    to={`/story/${s.story_id}`}
+                    style={{
+                      fontSize: "var(--text-title)",
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                      letterSpacing: "-0.01em",
+                      color: "var(--color-ink)",
+                      textDecoration: "none",
+                      transition: "text-decoration var(--dur-micro) var(--ease-out)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                    onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                    onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+                  >
+                    {decodeEntities(s.story_title)}
+                  </Link>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
+                    <span className="h-[7px] w-[7px] rounded-full" style={{ background: statusColor[s.story_status] ?? "var(--color-muted)" }} />
+                    <span style={{ color: statusColor[s.story_status] ?? "var(--color-muted)", fontWeight: 600 }}>
+                      {s.story_status.toUpperCase()}
+                    </span>
+                    <span>·</span>
+                    <span>{s.article_count} ARTICLES IN STORY</span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", paddingTop: "var(--space-md)", borderTop: "1px solid var(--color-rule)" }}>
+                  <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
+                    MATCHED ARTICLES ({s.matched_articles.length})
+                  </span>
+                  <ul style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+                    {s.matched_articles.slice(0, 3).map((a) => (
+                      <li key={a.id} style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+                        <Link
+                          to={`/article/${a.id}`}
+                          style={{
+                            fontSize: "var(--text-sm)",
+                            fontWeight: 500,
+                            color: "var(--color-ink)",
+                            textDecoration: "none",
+                            transition: "text-decoration var(--dur-micro) var(--ease-out)",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                          onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+                          onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+                        >
+                          {a.title ? decodeEntities(a.title) : a.url}
+                        </Link>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-md)", ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
+                          <span>{a.outlet} · {a.published_at}</span>
+                          {a.bias_label && (
+                            <>
+                              <span>·</span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: "var(--space-2xs) var(--space-xs)",
+                                  fontSize: "9px",
+                                  fontWeight: 700,
+                                  letterSpacing: "0.08em",
+                                  textTransform: "uppercase",
+                                  borderRadius: "var(--radius-input)",
+                                  ...chip(a.bias_label),
+                                }}
+                              >
+                                {a.bias_label}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

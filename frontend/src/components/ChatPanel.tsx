@@ -20,7 +20,7 @@ type Msg = { role: "user" | "assistant"; content: string; sources?: Source[] };
 
 type VoiceState = "idle" | "listening" | "transcribing";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
 
 /** Curated archive-level inquiry prompts for the global chat empty state.
  *  These guide the user toward ClearNews' core analytical capabilities:
@@ -33,7 +33,7 @@ export const GLOBAL_SUGGESTED_QUESTIONS = [
 ];
 
 const leanColor = (label: string | null) =>
-  label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--ink-muted)";
+  label === "left" ? "var(--bias-left)" : label === "right" ? "var(--bias-right)" : "var(--color-muted)";
 
 /** Render assistant text with [n] archive and [web:n] live-web citation
     markers as small mono chips that resolve against the message's sources
@@ -56,14 +56,14 @@ function CitedText({ content, sources }: { content: string; sources?: Source[] }
             key={i}
             style={{
               ...mono,
-              fontSize: 10,
+              fontSize: "var(--text-xs)",
               fontWeight: 600,
               background: web ? "transparent" : "var(--chip-center-bg)",
-              border: web ? `1px solid ${found ? "var(--ink-muted)" : "var(--border)"}` : undefined,
-              color: found ? "var(--ink)" : "var(--ink-muted)",
-              borderRadius: 4,
-              padding: web ? "0px 4px" : "1px 5px",
-              margin: "0 1px",
+              border: web ? `1px solid ${found ? "var(--color-muted)" : "var(--color-rule)"}` : undefined,
+              color: found ? "var(--color-ink)" : "var(--color-muted)",
+              borderRadius: "var(--radius-input)",
+              padding: web ? "0 var(--space-xs)" : "var(--space-2xs) var(--space-xs)",
+              margin: "0 var(--space-2xs)",
             }}
           >
             {web ? `w${label}` : label}
@@ -92,29 +92,10 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const vadRef = useRef<VadSession | null>(null);
   const transcribeAbortRef = useRef<AbortController | null>(null);
-  // Replaced with a fresh object by cancelVoice() and the unmount cleanup
-  // below - a plain write, deliberately not a `.current++` read-then-write,
-  // so a linter checking for stale ref reads in effect cleanups doesn't
-  // flag it (this ref is a persistent, manually-managed generation token,
-  // not a DOM node ref). startVoice() snapshots the current token before
-  // awaiting startVad() (mic permission + asset load - can take a while)
-  // and compares it by reference after; a mismatch means the user
-  // cancelled or the component unmounted while that promise was in
-  // flight, so the just-created session must be stopped immediately
-  // instead of being stored in vadRef/surfaced in the UI.
   const voiceGenRef = useRef({});
-
-  // Spoken playback for voice-originated turns only (see send()'s `opts.speak`
-  // and handleSpeechEnd below). One AudioContext is reused across the whole
-  // panel's lifetime rather than per-turn - it must first be created/resumed
-  // synchronously inside a user-gesture handler (startVoice(), called
-  // directly from the mic button's onClick) to satisfy the browser's
-  // autoplay policy; creating it later inside the async SSE loop risks
-  // landing in a permanently `suspended` context.
   const audioContextRef = useRef<AudioContext | null>(null);
   const speechQueueRef = useRef<SpeechQueue | null>(null);
 
-  // Release the mic if the panel unmounts (e.g. navigation) mid-recording.
   useEffect(() => {
     return () => {
       voiceGenRef.current = {};
@@ -132,8 +113,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     }
   }, [storyId]);
 
-  // Fetch top active/rising stories for the global empty state.
-  // Disabled when scoped to a specific story (storyId) or once a conversation is active.
   const { data: trendingStories } = useQuery<StoryCard[]>({
     queryKey: ["trendingAskStories"],
     queryFn: () => fetchStories({ limit: 4, status: "active" }),
@@ -151,9 +130,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     setInput("");
     setBusy(true);
 
-    // A new turn's audio must never overlap whatever a previous turn left
-    // playing/queued, voice-originated or not (e.g. a typed follow-up sent
-    // while the last voice answer is still being read out).
     stopSpeaking();
     speechQueueRef.current =
       opts?.speak && audioContextRef.current ? createSpeechQueue(audioContextRef.current) : null;
@@ -177,8 +153,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
-      // How much of `answer` has already been handed to the speech queue as
-      // complete sentences (voice-originated turns only - see below).
       let spokenUpTo = 0;
 
       for (;;) {
@@ -215,9 +189,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
           }
         }
       }
-      // The stream is done; whatever's left never hit terminal punctuation
-      // followed by whitespace (the model occasionally trails off without
-      // one) - flush it as one final sentence rather than dropping it.
       if (speechQueueRef.current) {
         const rest = answer.slice(spokenUpTo).trim();
         if (rest) speechQueueRef.current.enqueue(rest);
@@ -253,7 +224,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     if (!text.trim()) return;
     stopSpeaking();
 
-    // Must happen synchronously in user-gesture handler
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       audioContextRef.current = new AudioContext();
     }
@@ -272,18 +242,11 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     stopSpeaking();
   }
 
-  /** Arm the mic + VAD. Mirrors send()'s guard: don't start while an
-      answer is already streaming. */
   async function startVoice() {
     if (busy || voiceState !== "idle") return;
     setVoiceError(null);
     setVoiceState("listening");
 
-    // Must happen synchronously here, in the mic button's click handler,
-    // rather than later inside send()'s async SSE loop: browsers only allow
-    // an AudioContext to start producing sound if it was created/resumed
-    // within a user-gesture call stack. This is that gesture for the whole
-    // voice turn about to start (recording -> transcribing -> spoken reply).
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       audioContextRef.current = new AudioContext();
     }
@@ -306,17 +269,12 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
         },
       );
       if (voiceGenRef.current !== gen) {
-        // Cancelled or unmounted while startVad()'s mic-permission/asset
-        // load was still pending - a live session just landed after the
-        // fact. Stop it immediately rather than arming a mic the UI no
-        // longer shows as listening, and leave voiceState/vadRef alone
-        // since the cancel/unmount path already reset them.
         session.stop();
         return;
       }
       vadRef.current = session;
     } catch (err) {
-      if (voiceGenRef.current !== gen) return; // same race, on the rejection path
+      if (voiceGenRef.current !== gen) return;
       vadRef.current = null;
       setIsSpeaking(false);
       setVoiceState("idle");
@@ -328,9 +286,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     }
   }
 
-  /** Manual cancel, available for the whole listening/transcribing
-      lifetime - both an accessibility requirement and a fallback for VAD
-      misfires or a mid-recording change of mind. */
   function cancelVoice() {
     voiceGenRef.current = {};
     setIsSpeaking(false);
@@ -341,9 +296,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
     setVoiceState("idle");
   }
 
-  /** VAD's onSpeechEnd: package the captured clip, upload it for
-      transcription, and hand the transcript to the same send() the typed
-      input and suggested-question buttons use. */
   async function handleSpeechEnd(audio: Float32Array) {
     setIsSpeaking(false);
     vadRef.current?.stop();
@@ -390,7 +342,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             onClick={clearHistory}
             disabled={busy}
             className="cursor-pointer hover:underline disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}
+            style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}
           >
             CLEAR
           </button>
@@ -400,21 +352,13 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
         {messages.length === 0 && (
           <div className="flex flex-col gap-5 py-2" data-testid="ask-empty-state">
             <div className="text-center sm:text-left">
-              <p className="text-xs sm:text-sm" style={{ color: "var(--ink-muted)" }}>
+              <p className="text-xs sm:text-sm" style={{ color: "var(--color-muted)" }}>
                 Ask about {storyId ? "this story" : "any story in the archive"} — answers cite the underlying articles across perspectives.
               </p>
             </div>
 
-            {/* Suggested Question Pills */}
             <div className="flex flex-col gap-2" data-testid="suggested-questions-section">
-              <span
-                style={{
-                  ...mono,
-                  fontSize: "10px",
-                  letterSpacing: "0.08em",
-                  color: "var(--ink-muted)",
-                }}
-              >
+              <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
                 SUGGESTED QUESTIONS
               </span>
               <div className="flex flex-wrap gap-2">
@@ -425,47 +369,35 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                     onClick={() => send(q)}
                     disabled={busy}
                     data-testid="suggested-question-pill"
-                    className="cursor-pointer rounded-full border px-3 py-1.5 text-left text-xs transition-colors hover:border-[var(--ink)] disabled:opacity-40"
+                    className="cursor-pointer rounded-full border px-3 py-1.5 text-left text-xs transition-colors hover:border-[var(--color-ink)] disabled:opacity-40"
                     style={{
-                      borderColor: "var(--hair)",
-                      background: "var(--surface-1)",
-                      color: "var(--ink)",
+                      borderColor: "var(--color-rule)",
+                      background: "var(--color-paper)",
+                      color: "var(--color-ink)",
+                      borderRadius: "var(--radius-pill)",
+                      fontSize: "var(--text-xs)",
+                      fontFamily: "var(--font-body)",
+                      fontWeight: 500,
                     }}
                   >
-                    <span style={{ color: "var(--baseline)", marginRight: 5 }}>✦</span>
+                    <span style={{ color: "var(--color-accent)", marginRight: 5 }}>✦</span>
                     {q}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Trending & Rising Stories (Discrete Agent Prompts) */}
             {!storyId && trendingStories && trendingStories.length > 0 && (
               <div
                 className="flex flex-col gap-2 border-t pt-3.5"
-                style={{ borderColor: "var(--hair)" }}
+                style={{ borderColor: "var(--color-rule)" }}
                 data-testid="trending-stories-section"
               >
                 <div className="flex items-center justify-between">
-                  <span
-                    style={{
-                      ...mono,
-                      fontSize: "9.5px",
-                      letterSpacing: "0.08em",
-                      color: "var(--ink-muted)",
-                    }}
-                  >
+                  <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
                     EXPLORE TOP STORIES
                   </span>
-                  <span
-                    className="hidden sm:inline"
-                    style={{
-                      ...mono,
-                      fontSize: "9px",
-                      letterSpacing: "0.04em",
-                      color: "var(--ink-muted)",
-                    }}
-                  >
+                  <span className="hidden sm:inline" style={{ ...mono, fontSize: "var(--text-2xs)", letterSpacing: "0.04em", color: "var(--color-muted)" }}>
                     ASK AGENT
                   </span>
                 </div>
@@ -482,25 +414,30 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                       }
                       disabled={busy}
                       data-testid="trending-story-card"
-                      className="group flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors hover:border-[var(--ink-muted)] hover:bg-black/[0.02] dark:hover:bg-white/[0.03] disabled:opacity-40"
-                      style={{ borderColor: "var(--hair)", background: "transparent" }}
+                      className="group flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors hover:border-[var(--color-muted)] hover:bg-black/[0.02] dark:hover:bg-white/[0.03] disabled:opacity-40"
+                      style={{
+                        borderColor: "var(--color-rule)",
+                        background: "transparent",
+                        borderRadius: "var(--radius-input)",
+                        padding: "var(--space-sm) var(--space-md)",
+                      }}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="mb-0.5 flex items-center gap-1.5" style={{ ...mono, fontSize: "9px", color: "var(--ink-muted)" }}>
+                        <div className="mb-0.5 flex items-center gap-1.5" style={{ ...mono, fontSize: "var(--text-2xs)", color: "var(--color-muted)" }}>
                           <span>{story.article_count} ARTICLES</span>
                           <span>·</span>
                           <span>{story.status.toUpperCase()}</span>
                         </div>
                         <span
                           className="line-clamp-1 text-xs leading-snug group-hover:underline"
-                          style={{ color: "var(--ink)", fontWeight: 500 }}
+                          style={{ color: "var(--color-ink)", fontWeight: 500, fontFamily: "var(--font-body)" }}
                         >
                           {decodeEntities(story.agent_headline || story.title)}
                         </span>
                       </div>
                       <span
                         className="shrink-0 text-xs transition-transform group-hover:translate-x-0.5"
-                        style={{ ...mono, color: "var(--ink-muted)" }}
+                        style={{ ...mono, color: "var(--color-muted)" }}
                         aria-hidden="true"
                       >
                         →
@@ -516,24 +453,21 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
           {messages.map((m, i) => (
             <div
               key={i}
-              className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user" ? "self-end" : "self-start border"
-              }`}
+              className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "self-end" : "self-start border"}`}
               style={
                 m.role === "user"
-                  ? { background: "var(--ink)", color: "var(--surface-1)", borderRadius: "12px 12px 3px 12px" }
-                  : { background: "var(--surface-1)", color: "var(--ink)", borderColor: "var(--border)", borderRadius: "12px 12px 12px 3px" }
+                  ? { background: "var(--color-ink)", color: "var(--color-paper)", borderRadius: "12px 12px 3px 12px" }
+                  : { background: "var(--color-paper)", color: "var(--color-ink)", borderColor: "var(--color-rule)", borderRadius: "12px 12px 12px 3px" }
               }
             >
-              {/* some models emit 【id】instead of [id] */}
               {m.content ? (
                 <CitedText content={m.content.replace(/【(\d+)】/g, "[$1]")} sources={m.sources} />
               ) : (
                 busy && i === messages.length - 1 ? "…" : ""
               )}
               {m.sources && m.sources.length > 0 && (
-                <div className="mt-2.5 flex flex-col" style={{ borderTop: "1px solid var(--hair)" }}>
-                  <span className="pb-1.5 pt-2" style={{ ...mono, fontSize: "9.5px", letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
+                <div className="mt-2.5 flex flex-col" style={{ borderTop: "1px solid var(--color-rule)" }}>
+                  <span className="pb-1.5 pt-2" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
                     SOURCES — {m.sources.length}
                   </span>
                   {m.sources.map((s) => {
@@ -545,18 +479,18 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                         target={isWeb ? "_blank" : undefined}
                         rel={isWeb ? "noreferrer" : undefined}
                         className="flex gap-2 py-1.5"
-                        style={{ borderTop: "1px solid var(--hair)" }}
+                        style={{ borderTop: "1px solid var(--color-rule)" }}
                       >
-                        <span style={{ ...mono, fontSize: 10, fontWeight: 600, color: "var(--ink)" }}>
+                        <span style={{ ...mono, fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-ink)" }}>
                           {isWeb ? `w${s.citation_id?.split(":")[1]}` : s.article_id}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium" style={{ color: "var(--ink)" }}>
+                          <span className="block truncate text-xs font-medium" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
                             {s.title ? decodeEntities(s.title) : s.url}
                           </span>
-                          <span style={{ ...mono, fontSize: "9.5px", color: "var(--ink-muted)" }}>
+                          <span style={{ ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
                             {isWeb ? (
-                              <span style={{ color: "var(--ink-muted)", fontWeight: 600 }}>LIVE WEB</span>
+                              <span style={{ color: "var(--color-muted)", fontWeight: 600 }}>LIVE WEB</span>
                             ) : (
                               <span style={{ color: leanColor(s.bias_label), fontWeight: 600 }}>
                                 {(s.bias_label ?? "n/a").toUpperCase()}
@@ -573,7 +507,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
               {m.role === "assistant" && m.content && (
                 <div
                   className="mt-2 flex items-center justify-end"
-                  style={{ borderTop: "1px solid var(--hair)", paddingTop: "4px" }}
+                  style={{ borderTop: "1px solid var(--color-rule)", paddingTop: "4px" }}
                 >
                   <button
                     type="button"
@@ -581,10 +515,12 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                     className="cursor-pointer inline-flex items-center gap-1.5 rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                     style={{
                       ...mono,
-                      fontSize: "9.5px",
+                      fontSize: "var(--text-xs)",
                       fontWeight: 500,
                       letterSpacing: "0.06em",
-                      color: playingIndex === i ? "var(--bias-left)" : "var(--ink-muted)",
+                      color: playingIndex === i ? "var(--bias-left)" : "var(--color-muted)",
+                      borderRadius: "var(--radius-input)",
+                      padding: "var(--space-2xs) var(--space-xs)",
                     }}
                     aria-label={playingIndex === i ? "Stop reading message aloud" : "Read message aloud"}
                   >
@@ -630,7 +566,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
               key={q}
               onClick={() => send(q)}
               className="rounded-lg border px-2.5 py-1 text-xs hover:shadow-sm"
-              style={{ borderColor: "var(--border)", color: "var(--ink-2)", background: "var(--surface-1)" }}
+              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink-2)", background: "var(--color-paper)", borderRadius: "var(--radius-input)", fontSize: "var(--text-xs)", fontFamily: "var(--font-body)" }}
             >
               {q}
             </button>
@@ -662,7 +598,15 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                     : "Ask across all stories…"
             }
             className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-40"
-            style={{ borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }}
+            style={{
+              borderColor: "var(--color-rule)",
+              background: "var(--color-paper)",
+              color: "var(--color-ink)",
+              borderRadius: "var(--radius-input)",
+              fontSize: "var(--text-sm)",
+              fontFamily: "var(--font-body)",
+              padding: "var(--space-sm) var(--space-md)",
+            }}
           />
           <button
             type="button"
@@ -672,11 +616,16 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
               voiceState === "idle" ? "Record a voice question" : voiceState === "listening" ? "Stop recording" : "Cancel"
             }
             className="shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={
-              voiceState === "idle"
-                ? { borderColor: "var(--input-border)", background: "var(--page)", color: "var(--ink)" }
-                : { borderColor: "transparent", background: "var(--ink)", color: "var(--surface-1)" }
-            }
+            style={{
+              borderRadius: "var(--radius-input)",
+              padding: "var(--space-sm) var(--space-md)",
+              fontSize: "var(--text-sm)",
+              fontFamily: "var(--font-body)",
+              fontWeight: 500,
+              ...(voiceState === "idle"
+                ? { borderColor: "var(--color-rule)", background: "var(--color-paper)", color: "var(--color-ink)" }
+                : { borderColor: "transparent", background: "var(--color-ink)", color: "var(--color-paper)" }),
+            }}
           >
             {voiceState === "listening" && (
               isSpeaking ? (
@@ -686,7 +635,7 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 opacity-90" style={{ ...mono, letterSpacing: "0.04em" }}>
-                  <span className="inline-block h-1.5 w-1.5 rounded-full animate-ping" style={{ background: "var(--surface-1)" }} />
+                  <span className="inline-block h-1.5 w-1.5 rounded-full animate-ping" style={{ background: "var(--color-paper)" }} />
                   <span>LISTENING…</span>
                 </span>
               )
@@ -696,13 +645,6 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             )}
             {voiceState === "idle" && "Mic"}
           </button>
-          {/* Screen-reader-only announcement of voice state transitions. The
-              button's visible "● REC"/spinner/"Mic" content and its aria-label
-              both change with voiceState, but neither reliably triggers an
-              announcement on its own (aria-label changes on an
-              already-focused element aren't consistently spoken, and the
-              spinner has no accessible text at all) - this live region makes
-              the transition itself audible independent of focus. */}
           <span role="status" aria-live="polite" className="sr-only">
             {voiceState === "listening"
               ? "Listening for your question."
@@ -715,7 +657,16 @@ function ChatPanel({ storyId, fill }: { storyId?: number; fill?: boolean }) {
             onClick={busy ? stop : undefined}
             disabled={!busy && (voiceState !== "idle" || !input.trim())}
             className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-40"
-            style={{ background: "var(--ink)", color: "var(--surface-1)" }}
+            style={{
+              background: "var(--color-ink)",
+              color: "var(--color-paper)",
+              borderRadius: "var(--radius-input)",
+              padding: "var(--space-sm) var(--space-lg)",
+              fontSize: "var(--text-sm)",
+              fontFamily: "var(--font-body)",
+              fontWeight: 500,
+              boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
+            }}
           >
             {busy ? "Stop" : "Send"}
           </button>

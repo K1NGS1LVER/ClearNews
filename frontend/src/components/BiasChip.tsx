@@ -1,13 +1,13 @@
 import { BIAS_CONFIDENCE_THRESHOLD } from "../api";
 import { withErrorBoundary } from "./ErrorBoundary";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
 
 /**
  * Renders a per-article bias label chip.
  *
  * When `confidence` is provided and falls below BIAS_CONFIDENCE_THRESHOLD the
- * chip is shown as "?" in muted gray rather than a solid colored label.  This
+ * chip is shown as "?" in muted gray rather than a solid colored label. This
  * signals that the model (politicalBiasBERT, trained on US text) did not
  * produce a confident prediction — common for non-English or non-Western
  * outlets, and for articles where "center" is really just model uncertainty.
@@ -54,7 +54,7 @@ function BiasChip({
 
   return (
     <span
-      className="w-11 shrink-0 rounded py-0.5 text-center text-[9px] font-semibold uppercase"
+      className="w-11 shrink-0 rounded-md text-center text-[9px] font-semibold uppercase"
       style={{
         ...mono,
         letterSpacing: "0.08em",
@@ -62,6 +62,8 @@ function BiasChip({
         color: ink,
         opacity: uncertain ? 0.65 : 1,
         cursor: "default",
+        padding: "var(--space-2xs) 0",
+        borderRadius: "var(--radius-input)",
       }}
       title={tooltipText}
     >

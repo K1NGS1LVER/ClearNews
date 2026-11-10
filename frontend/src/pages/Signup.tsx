@@ -3,6 +3,72 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api";
 
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const display = { fontFamily: "var(--font-display)" } as const;
+
+const focusStyle = {
+  outline: "2px solid var(--color-focus)",
+  outlineOffset: "2px",
+} as const;
+
+const pressSpringStyle = {
+  transform: "translateY(3px)",
+  transition: "transform var(--dur-micro) var(--ease-out)",
+} as const;
+
+function InputField({ value, onChange, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      value={value}
+      onChange={onChange}
+      style={{
+        background: "var(--color-paper)",
+        border: "1.5px solid var(--color-rule)",
+        borderRadius: "var(--radius-input)",
+        fontSize: "var(--text-sm)",
+        fontFamily: "var(--font-body)",
+        color: "var(--color-ink)",
+        padding: "var(--space-sm) var(--space-md)",
+        ...props,
+      }}
+      onFocus={(e) => { Object.assign(e.currentTarget.style, focusStyle); e.currentTarget.style.borderColor = "var(--color-ink)"; }}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; e.currentTarget.style.borderColor = "var(--color-rule)"; }}
+    />
+  );
+}
+
+function PrimaryButton({ children, onClick, disabled, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...mono,
+        fontSize: "var(--text-sm)",
+        fontWeight: 500,
+        padding: "var(--space-sm) var(--space-xl)",
+        borderRadius: "var(--radius-input)",
+        background: "var(--color-ink)",
+        color: "var(--color-paper)",
+        border: "none",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        transition: "transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out)",
+        boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
+        ...props,
+      }}
+      onMouseDown={(e) => { if (!disabled) Object.assign(e.currentTarget.style, pressSpringStyle); }}
+      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Signup() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -28,66 +94,49 @@ export default function Signup() {
   }
 
   return (
-    <div className="mx-auto max-w-sm px-4 pb-8 pt-10 sm:px-8">
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--ink)" }}>
-        Create a free account
-      </h1>
-      <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit}>
-        <label className="flex flex-col gap-1.5">
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-            NAME
-          </span>
-          <input
-            required
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="rounded-lg px-3.5 py-2.5 text-sm outline-none"
-            style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
-          />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-            EMAIL
-          </span>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-lg px-3.5 py-2.5 text-sm outline-none"
-            style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
-          />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-            PASSWORD
-          </span>
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-lg px-3.5 py-2.5 text-sm outline-none"
-            style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
-          />
-        </label>
-        {error && <p className="text-sm" style={{ color: "var(--bias-right)" }}>{error}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-40"
-          style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
-        >
-          {pending ? "Creating account…" : "Create account"}
-        </button>
-      </form>
-      <p className="mt-5 text-sm" style={{ color: "var(--ink-muted)" }}>
-        Already have an account?{" "}
-        <Link to="/login" className="font-medium underline" style={{ color: "var(--ink)" }}>
-          Log in
-        </Link>
-      </p>
+    <div style={{ minHeight: "100vh", background: "var(--color-paper)", color: "var(--color-ink)", display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-2xl) var(--space-md)" }}>
+      <div className="container" style={{ maxWidth: "400px", width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: "var(--space-xl)" }}>
+          <h1 style={{ ...display, fontSize: "var(--text-section)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--color-ink)", marginBottom: "var(--space-md)" }}>
+            Create a free account
+          </h1>
+          <p style={{ fontSize: "var(--text-base)", color: "var(--color-muted)" }}>
+            Start tracking news from every angle
+          </p>
+        </div>
+
+        <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "var(--space-lg)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+            <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
+              NAME
+            </span>
+            <InputField required value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+            <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
+              EMAIL
+            </span>
+            <InputField type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+            <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
+              PASSWORD
+            </span>
+            <InputField type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {error && <p style={{ fontSize: "var(--text-sm)", color: "var(--bias-right)" }}>{error}</p>}
+          <PrimaryButton type="submit" disabled={pending}>
+            {pending ? "Creating account…" : "CREATE ACCOUNT"}
+          </PrimaryButton>
+        </form>
+
+        <p style={{ marginTop: "var(--space-xl)", textAlign: "center", fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
+          Already have an account?{" "}
+          <Link to="/login" style={{ fontWeight: 500, color: "var(--color-ink)", textDecoration: "none", borderBottom: "1px solid currentColor", textDecorationSkipInk: "none", transition: "opacity var(--dur-micro) var(--ease-out)" }}>
+            Log in
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

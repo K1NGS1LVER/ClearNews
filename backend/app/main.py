@@ -201,6 +201,14 @@ class CountryInfo(BaseModel):
     story_count: int  # stories about this country (Story.about_countries)
 
 
+class StorySearchResult(BaseModel):
+    story_id: int
+    story_title: str
+    story_status: str
+    article_count: int  # total in story
+    matched_articles: list[ArticleOut]  # the ones that matched
+
+
 class FeedbackRequest(BaseModel):
     direction: str  # more | less
 
@@ -686,6 +694,38 @@ def _serialize_story_detail(story: Story) -> StoryDetail:
     )
 
 
+@app.get("/api/stories/search", response_model=list[StorySearchResult])
+def stories_search(q: str, limit: int = 10, db: Session = Depends(get_db)):
+    """Full-text + semantic search that returns story-grouped results.
+    Internally uses the same hybrid_search on articles, then groups by story_id."""
+    articles = hybrid_search(db, q, limit=min(max(limit * 3, 10), 50))
+    # Group by story, preserving relevance order (first hit per story wins)
+    seen: dict[int, StorySearchResult] = {}
+    for a in articles:
+        if a.story_id is None:
+            continue
+        if a.story_id not in seen:
+            story = db.get(Story, a.story_id)
+            if not story:
+                continue
+            n = len(story.articles)
+            seen[a.story_id] = StorySearchResult(
+                story_id=story.id,
+                story_title=story.title,
+                story_status=story.status,
+                article_count=n,
+                matched_articles=[],
+            )
+        seen[a.story_id].matched_articles.append(_article_out(a))
+    results = list(seen.values())[:limit]
+    return results
+
+
+@app.get("/api/search", response_model=list[ArticleOut])
+def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
+    return [_article_out(a) for a in hybrid_search(db, q, limit=min(max(limit, 1), 100))]
+
+
 @app.get("/api/stories/{story_id}", response_model=StoryDetail)
 def get_story(story_id: int, db: Session = Depends(get_db)):
     story = db.get(Story, story_id)
@@ -894,41 +934,6 @@ def story_explanation_step(
 
     db.refresh(story)
     return _explanation_state(story)
-
-
-class StorySearchResult(BaseModel):
-    story_id: int
-    story_title: str
-    story_status: str
-    article_count: int  # total in story
-    matched_articles: list[ArticleOut]  # the ones that matched
-
-
-@app.get("/api/stories/search", response_model=list[StorySearchResult])
-def stories_search(q: str, limit: int = 10, db: Session = Depends(get_db)):
-    """Full-text + semantic search that returns story-grouped results.
-    Internally uses the same hybrid_search on articles, then groups by story_id."""
-    articles = hybrid_search(db, q, limit=min(max(limit * 3, 10), 50))
-    # Group by story, preserving relevance order (first hit per story wins)
-    seen: dict[int, StorySearchResult] = {}
-    for a in articles:
-        if a.story_id is None:
-            continue
-        if a.story_id not in seen:
-            story = db.get(Story, a.story_id)
-            if not story:
-                continue
-            n = len(story.articles)
-            seen[a.story_id] = StorySearchResult(
-                story_id=story.id,
-                story_title=story.title,
-                story_status=story.status,
-                article_count=n,
-                matched_articles=[],
-            )
-        seen[a.story_id].matched_articles.append(_article_out(a))
-    results = list(seen.values())[:limit]
-    return results
 
 
 @app.get("/api/search", response_model=list[ArticleOut])

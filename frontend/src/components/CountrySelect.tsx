@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchCountries } from "../api";
 import { withErrorBoundary } from "./ErrorBoundary";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
 
 /** Multi-select country picker. Backed by /api/countries so the list is
     never hardcoded - every country GDELT can be polled for is selectable,
@@ -47,8 +47,8 @@ function CountrySelect({
           {value.map((code) => (
             <span
               key={code}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-sm"
-              style={{ background: "var(--chip-center-bg)", color: "var(--chip-center-ink)" }}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1 text-sm"
+              style={{ background: "var(--chip-center-bg)", color: "var(--chip-center-ink)", borderRadius: "var(--radius-input)" }}
             >
               {byCode.get(code)?.name ?? code}
               <button type="button" onClick={() => toggle(code)} className="cursor-pointer">
@@ -63,13 +63,21 @@ function CountrySelect({
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => setOpen(true)}
         placeholder="Search for a country…"
-        className="w-full rounded-lg px-3.5 py-2.5 text-sm outline-none"
-        style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
+        className="w-full rounded-md px-3.5 py-2.5 text-sm outline-none"
+        style={{
+          border: "1px solid var(--color-rule)",
+          background: "var(--color-paper)",
+          color: "var(--color-ink)",
+          borderRadius: "var(--radius-input)",
+          fontSize: "var(--text-sm)",
+          fontFamily: "var(--font-body)",
+          padding: "var(--space-sm) var(--space-md)",
+        }}
       />
       {open && matches.length > 0 && (
         <div
-          className="absolute z-10 mt-1.5 max-h-64 w-full overflow-y-auto rounded-lg shadow-lg"
-          style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)" }}
+          className="absolute z-10 mt-1.5 max-h-64 w-full overflow-y-auto rounded-md shadow-lg"
+          style={{ border: "1px solid var(--color-rule)", background: "var(--color-paper)", borderRadius: "var(--radius-input)" }}
         >
           {matches.map((c) => {
             const hasData = c.source_article_count > 0 || c.story_count > 0;
@@ -79,11 +87,11 @@ function CountrySelect({
                 type="button"
                 onClick={() => toggle(c.code)}
                 className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2 text-left text-sm hover:bg-black/[0.03]"
-                style={{ color: "var(--ink)" }}
+                style={{ color: "var(--color-ink)" }}
               >
                 <span>{c.name}</span>
                 {!hasData && (
-                  <span style={{ ...mono, fontSize: 9.5, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+                  <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
                     NO DATA YET
                   </span>
                 )}

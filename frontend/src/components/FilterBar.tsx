@@ -3,7 +3,8 @@ import { fetchCountries } from "../api";
 import type { Filters } from "../lib/filters";
 import { withErrorBoundary } from "./ErrorBoundary";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const body = { fontFamily: "var(--font-body)" } as const;
 
 function pillGroup<T extends string | null>(
   options: readonly { value: T; label: string }[],
@@ -11,17 +12,26 @@ function pillGroup<T extends string | null>(
   onSelect: (v: T) => void,
 ) {
   return (
-    <div className="flex overflow-hidden rounded-lg" style={{ border: "1px solid var(--input-border)" }}>
+    <div className="flex overflow-hidden" style={{ borderRadius: "var(--radius-input)", border: "1px solid var(--color-rule)" }}>
       {options.map((opt) => (
         <button
           key={opt.label}
           type="button"
           onClick={() => onSelect(opt.value)}
-          className="cursor-pointer px-3 py-1.5 text-sm"
+          className="cursor-pointer"
           style={{
-            background: active === opt.value ? "var(--navpill)" : "var(--surface-1)",
-            color: active === opt.value ? "var(--navpill-ink)" : "var(--ink)",
+            padding: "var(--space-xs) var(--space-md)",
+            fontSize: "var(--text-sm)",
+            fontFamily: "var(--font-body)",
+            fontWeight: 500,
+            background: active === opt.value ? "var(--color-ink)" : "var(--color-paper)",
+            color: active === opt.value ? "var(--color-paper)" : "var(--color-ink)",
+            border: "none",
+            transition: "background var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out)",
           }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = "translateY(1px)"; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
         >
           {opt.label}
         </button>
@@ -46,8 +56,17 @@ function FilterBar({
       <select
         value={filters.country ?? ""}
         onChange={(e) => onChange({ ...filters, country: e.target.value || null })}
-        className="cursor-pointer rounded-lg px-3 py-1.5 text-sm outline-none"
-        style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
+        className="cursor-pointer outline-none"
+        style={{
+          padding: "var(--space-xs) var(--space-md)",
+          fontSize: "var(--text-sm)",
+          fontFamily: "var(--font-body)",
+          borderRadius: "var(--radius-input)",
+          border: "1px solid var(--color-rule)",
+          background: "var(--color-paper)",
+          color: "var(--color-ink)",
+          minWidth: 200,
+        }}
       >
         <option value="">All countries</option>
         {(countries ?? []).map((c) => (
@@ -85,11 +104,11 @@ function FilterBar({
 
 function CountryEmptyStateComponent({ countryName }: { countryName: string }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 rounded-xl py-16 text-center" style={{ border: "1px dashed var(--input-border)" }}>
-      <span style={{ ...mono, fontSize: 11, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+    <div className="flex flex-col items-center gap-1.5" style={{ padding: "var(--space-3xl)", borderRadius: "var(--radius-card)", border: "1px dashed var(--color-rule)", textAlign: "center" }}>
+      <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)", textTransform: "uppercase" }}>
         BUILDING COVERAGE FOR {countryName.toUpperCase()}
       </span>
-      <span className="text-sm" style={{ color: "var(--ink-muted)" }}>
+      <span style={{ ...body, fontSize: "var(--text-sm)", color: "var(--color-ink-2)" }}>
         First stories typically appear within an hour or two.
       </span>
     </div>

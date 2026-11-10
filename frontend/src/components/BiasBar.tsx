@@ -7,6 +7,8 @@ type Props = {
   showLabels?: boolean;
 };
 
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+
 /** Left/center/right coverage share as a 3-segment bar (2px surface gaps). */
 function BiasBar({ left, center, right, showLabels }: Props) {
   const l = left ?? 0;
@@ -28,11 +30,11 @@ function BiasBar({ left, center, right, showLabels }: Props) {
       {showLabels && (
         <div
           className="mt-1.5 flex justify-between"
-          style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.04em", color: "var(--ink-muted)" }}
+          style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.04em", color: "var(--color-muted)" }}
         >
-          <span>◀ {pct(l)} LEFT</span>
+          <span>{pct(l)} LEFT</span>
           <span>{pct(c)} CENTER</span>
-          <span>{pct(r)} RIGHT ▶</span>
+          <span>{pct(r)} RIGHT</span>
         </div>
       )}
     </div>

@@ -17,14 +17,15 @@ function lifespanDays(firstSeen: string, lastSeen: string) {
   return Math.max(1, Math.round(ms / 86_400_000));
 }
 
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const body = { fontFamily: "var(--font-body)" } as const;
+
 /** Status + momentum line: dot/status/count for active & fading, a closed
     summary for dead stories (matches the dc.html "row 4 dead" treatment). */
 function MetaLineComponent({ s }: { s: StoryCard }) {
-  const mono = { fontFamily: "var(--font-mono)", fontSize: "10.5px", letterSpacing: "0.06em", color: "var(--ink-muted)" };
-
   if (s.status === "dead") {
     return (
-      <div className="flex items-center gap-2" style={mono}>
+      <div className="flex items-center gap-2" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
         <span className="h-[7px] w-[7px] rounded-full" style={{ background: "var(--status-dead)" }} />
         <span>DEAD · {monthDay(s.last_seen)}</span>
         <span>·</span>
@@ -39,7 +40,7 @@ function MetaLineComponent({ s }: { s: StoryCard }) {
   const patternStyle = PATTERN_STYLE[pattern];
 
   return (
-    <div className="flex items-center gap-2" style={mono}>
+    <div className="flex items-center gap-2" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
       <span className="h-[7px] w-[7px] rounded-full" style={{ background: statusColor[s.status] }} />
       <span style={{ color: statusColor[s.status], fontWeight: 600 }}>{s.status.toUpperCase()}</span>
       <span>·</span>
@@ -72,7 +73,7 @@ function LeanBarComponent({ left, center, right }: { left: number | null; center
         <div style={{ flexGrow: c, background: "var(--bias-center)" }} />
         <div style={{ flexGrow: r, background: "var(--bias-right)" }} />
       </div>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-muted)" }}>
+      <span style={{ ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
         {centerDominant ? "~" : ""}{pct(l)}·{pct(c)}·{pct(r)}
       </span>
     </div>
@@ -98,25 +99,22 @@ function ThumbComponent({
         src={src}
         alt=""
         className={cls}
-        style={{ opacity: dead ? 0.6 : 1 }}
+        style={{ opacity: dead ? 0.6 : 1, borderRadius: "var(--radius-input)" }}
         aria-hidden
         loading="lazy"
         onError={() => setBroken(true)}
       />
     );
   }
-  // No real image and no stock-photo fallback configured (PEXELS_API_KEY is
-  // optional - self-hosters shouldn't need a second API key just to get a
-  // decent-looking card). A shaded card with the headline reads better than
-  // an empty box or a generic "no image" icon, and needs zero extra config.
+  // No real image and no stock-photo fallback configured. A shaded card with the headline reads better.
   return (
     <div
       className={`${cls} flex items-center p-3`}
-      style={{ opacity: dead ? 0.6 : 1, background: "var(--thumb-a)" }}
+      style={{ opacity: dead ? 0.6 : 1, background: "var(--thumb-a)", borderRadius: "var(--radius-input)" }}
     >
       <span
         className="line-clamp-3"
-        style={{ fontFamily: "var(--font-serif)", fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: "var(--ink-2)" }}
+        style={{ ...body, fontSize: "var(--text-sm)", fontWeight: 600, lineHeight: 1.3, color: "var(--color-ink-2)" }}
       >
         {title}
       </span>

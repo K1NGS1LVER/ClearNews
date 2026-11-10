@@ -62,45 +62,46 @@ function ErrorFallback({
   const label = name ? `${name} failed to render.` : "A render error stopped this view.";
   const compact = kind === "component";
 
+  const mono = { fontFamily: "var(--font-outlier)" } as const;
+  const body = { fontFamily: "var(--font-body)" } as const;
+  const display = { fontFamily: "var(--font-display)" } as const;
+
   return (
-    <div className={compact ? "rounded-lg border p-4" : "mx-auto max-w-4xl px-4 py-12 sm:px-8"}>
+    <div className={compact ? "rounded-md border p-4" : "mx-auto max-w-3xl px-4 py-12 sm:px-8"}>
       <div
-        className={compact ? "" : "rounded-xl border p-6"}
-        style={{ background: "var(--surface-1)", borderColor: "var(--border)", color: "var(--ink)" }}
+        className={compact ? "" : "rounded-lg border p-6"}
+        style={{ background: "var(--color-paper)", borderColor: "var(--color-rule)", color: "var(--color-ink)", borderRadius: "var(--radius-card)" }}
         role="alert"
       >
-        <p
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            color: "var(--bias-right)",
-          }}
-        >
+        <p style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--bias-right)" }}>
           RENDER ERROR
         </p>
-        <h2
-          className="mt-1"
-          style={{
-            fontFamily: "var(--font-serif)",
-            fontSize: compact ? 17 : 24,
-            fontWeight: 700,
-            color: "var(--ink)",
-          }}
-        >
+        <h2 className="mt-1" style={{ ...display, fontSize: compact ? "var(--text-lg)" : "var(--text-2xl)", fontWeight: 700, color: "var(--color-ink)" }}>
           {title}
         </h2>
-        <p className="mt-2 text-sm" style={{ color: "var(--ink-2)" }}>
+        <p className="mt-2" style={{ ...body, fontSize: "var(--text-sm)", color: "var(--color-ink-2)" }}>
           {label}
         </p>
-        <p className="mt-2 break-words text-xs" style={{ color: "var(--ink-muted)" }}>
+        <p className="mt-2 break-words" style={{ ...mono, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
           {error.message}
         </p>
         <button
           type="button"
           onClick={onReset}
-          className="mt-4 rounded-lg px-3 py-1.5 text-sm font-semibold hover:opacity-80"
-          style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
+          className="mt-4 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold cursor-pointer transition-[background,color] hover:opacity-80 active:scale-[0.98]"
+          style={{
+            background: "var(--color-ink)",
+            color: "var(--color-paper)",
+            borderRadius: "var(--radius-input)",
+            padding: "var(--space-sm) var(--space-lg)",
+            fontSize: "var(--text-sm)",
+            fontFamily: "var(--font-body)",
+            fontWeight: 500,
+            boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
+          }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = "translateY(1px)"; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
         >
           Try again
         </button>

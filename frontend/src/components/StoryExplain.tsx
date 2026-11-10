@@ -14,17 +14,17 @@ import BiasBar from "./BiasBar";
 import BiasChip from "./BiasChip";
 import { withErrorBoundary } from "./ErrorBoundary";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
-const serif = { fontFamily: "var(--font-serif)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const serif = { fontFamily: "var(--font-body)" } as const; // Using body instead of serif per Hallmark
 const BIAS_ORDER: BiasLabel[] = ["left", "center", "right"];
 const classVar = (l: BiasLabel) => `var(--bias-${l})`;
 
-const axis = { stroke: "var(--baseline)", fontSize: 11, tickLine: false, tick: { fill: "var(--ink-muted)" } } as const;
+const axis = { stroke: "var(--color-rule)", fontSize: 11, tickLine: false, tick: { fill: "var(--color-muted)" } } as const;
 const tooltipStyle = {
-  background: "var(--surface-1)",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  fontSize: 12,
+  background: "var(--color-paper)",
+  border: "1px solid var(--color-rule)",
+  borderRadius: "var(--radius-input)",
+  fontSize: "var(--text-sm)",
 };
 
 function StoryExplain({ storyId }: { storyId: number }) {
@@ -68,26 +68,36 @@ function StoryExplain({ storyId }: { storyId: number }) {
   if (state.status === "none" && !running) {
     if (state.eligible === 0) {
       return (
-        <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
           No labeled articles yet — check back once coverage has been processed.
         </p>
       );
     }
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
           See which words in the coverage pushed the model toward each lean label.
         </p>
         <button
           type="button"
           onClick={() => runLoop(false)}
-          className="w-fit rounded py-1.5 px-3 hover:opacity-80"
-          style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", background: "var(--chip-center-bg)", color: "var(--chip-center-ink)" }}
+          className="w-fit rounded-md px-3 py-1.5 text-xs font-semibold cursor-pointer transition-opacity hover:opacity-80"
+          style={{
+            ...mono,
+            letterSpacing: "0.06em",
+            background: "var(--chip-center-bg)",
+            color: "var(--chip-center-ink)",
+            borderRadius: "var(--radius-input)",
+            padding: "var(--space-xs) var(--space-md)",
+            fontSize: "var(--text-xs)",
+            fontFamily: "var(--font-outlier)",
+            fontWeight: 700,
+          }}
         >
           EXPLAIN THIS STORY'S LEAN · UP TO {Math.min(state.eligible, 5)} ARTICLES (~1-3 MIN)
         </button>
         {error && (
-          <p className="text-xs" style={{ color: "var(--bias-right)" }}>
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--bias-right)" }}>
             {error}
           </p>
         )}
@@ -104,11 +114,11 @@ function StoryExplain({ storyId }: { storyId: number }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {running ? (
-          <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+          <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
             ANALYZING · {state.analyzed}/{expectedTotal} ARTICLES…
           </span>
         ) : (
-          <span style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+          <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
             BASED ON {state.analyzed} ARTICLE{state.analyzed === 1 ? "" : "S"}
             {state.as_of && ` · AS OF ${new Date(state.as_of).toLocaleDateString()}`}
           </span>
@@ -117,8 +127,8 @@ function StoryExplain({ storyId }: { storyId: number }) {
           <button
             type="button"
             onClick={() => runLoop(true)}
-            className="hover:opacity-70"
-            style={{ ...mono, fontSize: 10, letterSpacing: "0.06em", color: "var(--ink-2)" }}
+            className="hover:opacity-70 cursor-pointer"
+            style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: "var(--color-ink-2)" }}
           >
             RECOMPUTE WITH NEWER ARTICLES ↻
           </button>
@@ -126,7 +136,7 @@ function StoryExplain({ storyId }: { storyId: number }) {
       </div>
 
       {error && (
-        <p className="text-xs" style={{ color: "var(--bias-right)" }}>
+        <p style={{ fontSize: "var(--text-xs)", color: "var(--bias-right)" }}>
           {error}
         </p>
       )}
@@ -140,7 +150,7 @@ function StoryExplain({ storyId }: { storyId: number }) {
               right={state.aggregate.probs.right}
               showLabels
             />
-            <p className="mt-1.5" style={{ ...mono, fontSize: 10, letterSpacing: "0.04em", color: "var(--ink-muted)" }}>
+            <p className="mt-1.5" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.04em", color: "var(--color-muted)" }}>
               MEAN MODEL CONFIDENCE ACROSS ANALYZED ARTICLES — THE HONEST BASIS FOR A "CENTER" LABEL
             </p>
           </div>
@@ -162,7 +172,7 @@ function StoryExplain({ storyId }: { storyId: number }) {
       </ul>
 
       {state.aggregate && (
-        <p style={{ ...mono, fontSize: 9.5, letterSpacing: "0.04em", color: "var(--ink-muted)" }}>
+        <p style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.04em", color: "var(--color-muted)" }}>
           SHAP PARTITION VALUES · SHADING = PUSH TOWARD EACH ARTICLE'S PREDICTED LABEL
         </p>
       )}
@@ -175,7 +185,7 @@ function TopWordsChart({ aggregate }: { aggregate: ExplanationAggregate }) {
   if (!present.length) return null;
   return (
     <div>
-      <span style={{ ...mono, fontSize: 10, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
+      <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>
         TOP WORDS PUSHING EACH LABEL
       </span>
       <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
@@ -183,7 +193,7 @@ function TopWordsChart({ aggregate }: { aggregate: ExplanationAggregate }) {
           const data = aggregate.top_words[label].slice(0, 6).map((w) => ({ word: w.word, value: w.value }));
           return (
             <div key={label}>
-              <span style={{ ...mono, fontSize: 9.5, letterSpacing: "0.06em", color: classVar(label) }}>
+              <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.06em", color: classVar(label) }}>
                 {label.toUpperCase()}
               </span>
               <ResponsiveContainer width="100%" height={Math.max(90, data.length * 26)}>
@@ -218,7 +228,7 @@ function ExplanationRow({
   onToggle: () => void;
 }) {
   return (
-    <li className="flex flex-col gap-2 py-2.5" style={{ borderTop: first ? "none" : "1px solid var(--hair)" }}>
+    <li className="flex flex-col gap-2 py-2.5" style={{ borderTop: first ? "none" : "1px solid var(--color-rule)" }}>
       <div className="flex items-center gap-3">
         <BiasChip
           label={article.bias_label}
@@ -227,7 +237,7 @@ function ExplanationRow({
         <Link
           to={`/article/${article.id}`}
           className="min-w-0 flex-1 truncate hover:underline"
-          style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)" }}
+          style={{ fontSize: "var(--text-base)", fontWeight: 500, color: "var(--color-ink)" }}
         >
           {article.title ? decodeEntities(article.title) : `Article ${article.id}`}
         </Link>
@@ -235,13 +245,13 @@ function ExplanationRow({
           <button
             type="button"
             onClick={onToggle}
-            className="shrink-0 hover:opacity-70"
-            style={{ ...mono, fontSize: 10, letterSpacing: "0.05em", color: "var(--ink-muted)" }}
+            className="shrink-0 hover:opacity-70 cursor-pointer"
+            style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.05em", color: "var(--color-muted)" }}
           >
             {probsLabel(article.probs)} {expanded ? "▲" : "▼"}
           </button>
         ) : (
-          <span className="shrink-0" style={{ ...mono, fontSize: 10, letterSpacing: "0.05em", color: "var(--ink-muted)" }}>
+          <span className="shrink-0" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.05em", color: "var(--color-muted)" }}>
             QUEUED…
           </span>
         )}
@@ -270,14 +280,14 @@ function HighlightedText({
   const maxAbs = Math.max(0.001, ...values.map((v) => Math.abs(v[classIdx])));
   return (
     <div
-      className="max-h-56 overflow-y-auto rounded p-3"
-      style={{ ...serif, fontSize: 14, lineHeight: 1.7, color: "var(--ink)", background: "var(--surface-1)", border: "1px solid var(--hair)" }}
+      className="max-h-56 overflow-y-auto rounded-md p-3"
+      style={{ ...serif, fontSize: "var(--text-base)", lineHeight: 1.7, color: "var(--color-ink)", background: "var(--color-paper)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)", padding: "var(--space-md)" }}
     >
       {tokens.map((t, i) => {
         const v = values[i][classIdx];
         const pct = Math.round((55 * Math.abs(v)) / maxAbs);
         if (pct <= 3) return <span key={i}>{t}</span>;
-        const color = v >= 0 ? classVar(predicted) : "var(--baseline)";
+        const color = v >= 0 ? classVar(predicted) : "var(--color-muted)";
         return (
           <span key={i} style={{ background: `color-mix(in srgb, ${color} ${pct}%, transparent)` }}>
             {t}

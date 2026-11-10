@@ -51,22 +51,22 @@ function StoryMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-sm leading-none"
-        style={{ background: "var(--surface-1)", color: "var(--ink-muted)" }}
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-sm leading-none"
+        style={{ background: "var(--color-paper)", color: "var(--color-muted)", borderRadius: "var(--radius-pill)" }}
         aria-label="Story options"
       >
         ⋯
       </button>
       {open && (
         <div
-          className="absolute right-0 z-10 mt-1 w-48 overflow-hidden rounded-lg shadow-lg"
-          style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)" }}
+          className="absolute right-0 z-10 mt-1 w-48 overflow-hidden rounded-md shadow-lg"
+          style={{ border: "1px solid var(--color-rule)", background: "var(--color-paper)", borderRadius: "var(--radius-card)" }}
         >
           <button
             type="button"
             onClick={() => send("more")}
             className="block w-full cursor-pointer px-3.5 py-2 text-left text-sm hover:bg-black/[0.03]"
-            style={{ color: "var(--ink)" }}
+            style={{ color: "var(--color-ink)" }}
           >
             Show me more like this
           </button>
@@ -74,7 +74,7 @@ function StoryMenu({
             type="button"
             onClick={() => send("less")}
             className="block w-full cursor-pointer px-3.5 py-2 text-left text-sm hover:bg-black/[0.03]"
-            style={{ color: "var(--ink)" }}
+            style={{ color: "var(--color-ink)" }}
           >
             Show me less of this
           </button>

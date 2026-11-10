@@ -19,7 +19,7 @@ const PAD = 30;
 // diverging blue -> gray -> red over bias score -0.5..+0.5
 const biasScale = scaleLinear<string>(
   [-0.5, 0, 0.5],
-  ["#2a78d6", "#b3b0a3", "#d64540"],
+  ["var(--bias-left)", "var(--color-muted)", "var(--bias-right)"],
 ).clamp(true);
 
 /** Outlets positioned by the similarity of what they publish (UMAP of mean
@@ -33,7 +33,7 @@ function OutletMap() {
 
   if (!data) return <Loading label="Loading map…" compact />;
   if (data.outlets.length < 2)
-    return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>Not enough outlets yet.</p>;
+    return <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Not enough outlets yet.</p>;
 
   const xs = data.outlets.map((o) => o.x);
   const ys = data.outlets.map((o) => o.y);
@@ -42,6 +42,8 @@ function OutletMap() {
   const sr = scaleSqrt([1, Math.max(...data.outlets.map((o) => o.articles))], [4, 16]);
 
   const labeled = [...data.outlets].sort((a, b) => b.articles - a.articles).slice(0, 8);
+
+  const mono = { fontFamily: "var(--font-outlier)" } as const;
 
   return (
     <div className="relative">
@@ -54,7 +56,7 @@ function OutletMap() {
             r={sr(o.articles)}
             fill={biasScale(o.mean_bias ?? 0)}
             fillOpacity={0.8}
-            stroke="var(--surface-1)"
+            stroke="var(--color-paper)"
             strokeWidth={2}
             onMouseEnter={() => setHover(o)}
             onMouseLeave={() => setHover(null)}
@@ -68,7 +70,7 @@ function OutletMap() {
             y={sy(o.y) - sr(o.articles) - 3}
             fontSize={10}
             textAnchor="middle"
-            fill="var(--ink-2)"
+            fill="var(--color-ink-2)"
           >
             {o.domain}
           </text>
@@ -76,20 +78,20 @@ function OutletMap() {
       </svg>
       <div
         className="mt-1.5 flex flex-wrap items-center gap-2.5"
-        style={{ fontFamily: "var(--font-mono)", fontSize: "9.5px", letterSpacing: "0.04em", color: "var(--ink-muted)" }}
+        style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.04em", color: "var(--color-muted)" }}
       >
         <span>LEFT</span>
-        <span className="inline-block h-1.5 w-20 rounded-full" style={{ background: "linear-gradient(to right, var(--bias-left), var(--baseline), var(--bias-right))" }} />
+        <span className="inline-block h-1.5 w-20 rounded-full" style={{ background: "linear-gradient(to right, var(--bias-left), var(--color-muted), var(--bias-right))" }} />
         <span>RIGHT</span>
         <span className="ml-2">SIZE = VOLUME</span>
       </div>
       {hover && (
         <div
-          className="pointer-events-none absolute left-2 top-2 rounded border px-2 py-1 text-xs shadow-sm"
-          style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
+          className="pointer-events-none absolute left-2 top-2 rounded-md border px-2 py-1 text-xs shadow-sm"
+          style={{ background: "var(--color-paper)", borderColor: "var(--color-rule)", borderRadius: "var(--radius-input)" }}
         >
-          <div className="font-medium">{hover.domain}</div>
-          <div style={{ color: "var(--ink-muted)" }}>
+          <div style={{ fontWeight: 600, color: "var(--color-ink)" }}>{hover.domain}</div>
+          <div style={{ color: "var(--color-muted)" }}>
             {hover.articles} articles · lean {hover.mean_bias?.toFixed(2) ?? "n/a"}
           </div>
         </div>

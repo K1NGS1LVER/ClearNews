@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
-const serif = { fontFamily: "var(--font-serif)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const body = { fontFamily: "var(--font-body)" } as const;
 
 /**
  * Collapsible plain-English note about the limitations of the political bias
- * classifier.  Placed below BiasBar on the Story page.
+ * classifier. Placed below BiasBar on the Story page.
  *
  * Adapts its content based on:
  * - centerShare: when dominant it names the "uncertainty" problem specifically
@@ -19,19 +19,19 @@ export default function BiasConfidenceNote({
   hasNonEnglishOutlets?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const color = "var(--ink-muted)";
+  const color = "var(--color-muted)";
 
   const centerPct =
     centerShare !== null ? Math.round(centerShare * 100) : null;
   const centerHigh = centerPct !== null && centerPct > 40;
 
   return (
-    <div className="mt-2.5" style={{ ...mono, fontSize: "9.5px", letterSpacing: "0.05em", color }}>
+    <div className="mt-2.5" style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.05em", color }}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         className="cursor-pointer transition-opacity hover:opacity-70"
-        style={{ color, textDecoration: "underline", textDecorationStyle: "dotted" }}
+        style={{ color, textDecoration: "underline", textDecorationStyle: "dotted", background: "none", border: "none", padding: 0, font: "inherit" }}
         aria-expanded={expanded}
       >
         ⓘ ABOUT THESE LEAN LABELS {expanded ? "▲" : "▼"}
@@ -39,14 +39,16 @@ export default function BiasConfidenceNote({
 
       {expanded && (
         <div
-          className="mt-2.5 flex flex-col gap-2 rounded-md px-3.5 py-3"
+          className="mt-2.5 flex flex-col gap-2"
           style={{
-            ...serif,
-            fontSize: 12,
+            ...body,
+            fontSize: "var(--text-sm)",
             lineHeight: 1.65,
-            color: "var(--ink-2)",
-            background: "var(--surface-1)",
-            border: "1px solid var(--border)",
+            color: "var(--color-ink-2)",
+            background: "var(--color-paper)",
+            border: "1px solid var(--color-rule)",
+            borderRadius: "var(--radius-input)",
+            padding: "var(--space-md) var(--space-lg)",
             maxWidth: 520,
           }}
         >
@@ -57,8 +59,8 @@ export default function BiasConfidenceNote({
             shows{" "}
             <span
               style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
+                ...mono,
+                fontSize: "var(--text-xs)",
                 fontWeight: 700,
                 letterSpacing: "0.06em",
               }}
@@ -90,7 +92,7 @@ export default function BiasConfidenceNote({
             </p>
           )}
 
-          <p style={{ color: "var(--ink-muted)", fontSize: 11 }}>
+          <p style={{ color: "var(--color-muted)", fontSize: "var(--text-xs)" }}>
             The SHAP explanation panel (below) shows the specific words that
             pushed each label — always more informative than the aggregate bar.
           </p>

@@ -5,8 +5,8 @@ import { CATEGORIES, type BiasPref, type Category, putPreferences } from "../api
 import { useMe } from "../auth";
 import CountrySelect from "../components/CountrySelect";
 
-const mono = { fontFamily: "var(--font-mono)" } as const;
-const serif = { fontFamily: "var(--font-serif)" } as const;
+const mono = { fontFamily: "var(--font-outlier)" } as const;
+const display = { fontFamily: "var(--font-display)" } as const;
 
 const categoryLabels: Record<Category, string> = {
   politics: "Politics",
@@ -25,6 +25,208 @@ const biasOptions: { value: BiasPref; label: string; description: string }[] = [
   { value: "everything", label: "EVERYTHING", description: "No lean-based ranking — just relevance and recency." },
   { value: "challenge", label: "CHALLENGE ME", description: "Surface stories with the most contested, polarized coverage." },
 ];
+
+const focusStyle = {
+  outline: "2px solid var(--color-focus)",
+  outlineOffset: "2px",
+} as const;
+
+const pressSpringStyle = {
+  transform: "translateY(3px)",
+  transition: "transform var(--dur-micro) var(--ease-out)",
+} as const;
+
+const pressSpringMicroStyle = {
+  transform: "translateY(2px)",
+  transition: "transform var(--dur-micro) var(--ease-out)",
+} as const;
+
+function InputLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+      <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)" }}>{children}</span>
+    </label>
+  );
+}
+
+function InputField({ value, onChange, placeholder, maxWidth, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { maxWidth?: string }) {
+  return (
+    <input
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      style={{
+        maxWidth,
+        background: "var(--color-paper)",
+        border: "1.5px solid var(--color-rule)",
+        borderRadius: "var(--radius-input)",
+        fontSize: "var(--text-sm)",
+        fontFamily: "var(--font-body)",
+        color: "var(--color-ink)",
+        padding: "var(--space-sm) var(--space-md)",
+        ...props,
+      }}
+      onFocus={(e) => { Object.assign(e.currentTarget.style, focusStyle); e.currentTarget.style.borderColor = "var(--color-ink)"; }}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; e.currentTarget.style.borderColor = "var(--color-rule)"; }}
+    />
+  );
+}
+
+function PrimaryButton({ children, onClick, disabled, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...mono,
+        fontSize: "var(--text-sm)",
+        fontWeight: 500,
+        padding: "var(--space-sm) var(--space-xl)",
+        borderRadius: "var(--radius-input)",
+        background: "var(--color-ink)",
+        color: "var(--color-paper)",
+        border: "none",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        transition: "transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out)",
+        boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
+        ...props,
+      }}
+      onMouseDown={(e) => { if (!disabled) Object.assign(e.currentTarget.style, pressSpringStyle); }}
+      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({ children, onClick, disabled, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...mono,
+        fontSize: "var(--text-sm)",
+        fontWeight: 500,
+        color: "var(--color-muted)",
+        background: "transparent",
+        border: "none",
+        cursor: disabled ? "default" : "pointer",
+        textDecoration: "underline",
+        textDecorationStyle: "dotted",
+        opacity: disabled ? 0.4 : 1,
+        transition: "color var(--dur-micro) var(--ease-out)",
+        ...props,
+      }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChipButton({ active, onClick, children, dotColor, dotActive }: { active: boolean; onClick: () => void; children: React.ReactNode; dotColor?: string; dotActive?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "var(--space-sm)",
+        padding: "var(--space-xs) var(--space-md)",
+        borderRadius: "var(--radius-input)",
+        border: `1.5px solid ${active ? "var(--color-ink)" : "var(--color-rule)"}`,
+        background: active ? "var(--color-ink)" : "var(--color-paper)",
+        color: active ? "var(--color-paper)" : "var(--color-ink)",
+        cursor: "pointer",
+        transition: "transform var(--dur-micro) var(--ease-out), background var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out)",
+      }}
+      onMouseDown={(e) => Object.assign(e.currentTarget.style, pressSpringMicroStyle)}
+      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+    >
+      {children}
+      {dotActive && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: dotColor ?? "var(--status-fading)", flexShrink: 0 }} />}
+    </button>
+  );
+}
+
+function OptionCard({ active, onClick, title, description }: { active: boolean; onClick: () => void; title: string; description: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-xs)",
+        padding: "var(--space-md)",
+        borderRadius: "var(--radius-input)",
+        border: `1.5px solid ${active ? "var(--color-ink)" : "var(--color-rule)"}`,
+        background: "var(--color-paper)",
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "transform var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out)",
+      }}
+      onMouseDown={(e) => Object.assign(e.currentTarget.style, pressSpringMicroStyle)}
+      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+      onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+    >
+      <div style={{ ...mono, fontSize: "var(--text-xs)", fontWeight: 600, letterSpacing: "0.06em", color: "var(--color-ink)" }}>{title}</div>
+      <div style={{ fontSize: "var(--text-sm)", lineHeight: 1.4, color: "var(--color-muted)" }}>{description}</div>
+    </button>
+  );
+}
+
+function KeywordChip({ children, onRemove }: { children: string; onRemove: () => void }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "var(--space-sm)",
+        padding: "var(--space-xs) var(--space-md)",
+        fontSize: "var(--text-sm)",
+        background: "var(--chip-center-bg)",
+        color: "var(--chip-center-ink)",
+        borderRadius: "var(--radius-input)",
+      }}
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        style={{
+          ...mono,
+          fontSize: "var(--text-sm)",
+          lineHeight: 1,
+          color: "inherit",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+          opacity: 0.6,
+        }}
+        onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
+        onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
+      >
+        ×
+      </button>
+    </span>
+  );
+}
 
 export default function Welcome() {
   const { data: me } = useMe();
@@ -49,11 +251,6 @@ export default function Welcome() {
       }
       return [...prev, cat];
     });
-  }
-
-  function toggleFavourite(cat: Category) {
-    if (!categories.includes(cat)) return;
-    setFavourite((prev) => (prev === cat ? null : cat));
   }
 
   function addKeyword(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -88,151 +285,108 @@ export default function Welcome() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-12 pt-6 sm:px-8">
-      <h1 style={{ ...serif, fontSize: 30, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--ink)" }}>
-        Tell us what you follow
-      </h1>
-      <p className="mt-1.5" style={{ fontSize: 14, color: "var(--ink-muted)" }}>
-        This shapes your For You feed. You can change it anytime.
-      </p>
+    <div style={{ minHeight: "100vh", background: "var(--color-paper)", color: "var(--color-ink)" }}>
+      <section style={{ paddingTop: "var(--space-xl)", paddingBottom: "var(--space-lg)" }}>
+        <div className="container" style={{ maxWidth: "720px" }}>
+          <h1 style={{ ...display, fontSize: "var(--text-section)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--color-ink)", marginBottom: "var(--space-md)" }}>
+            Tell us what you follow
+          </h1>
+          <p style={{ fontSize: "var(--text-base)", color: "var(--color-muted)", marginBottom: "var(--space-xl)" }}>
+            This shapes your For You feed. You can change it anytime.
+          </p>
 
-      <label className="mt-8 flex flex-col gap-1.5">
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>DISPLAY NAME</span>
-        <input
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          className="max-w-xs rounded-lg px-3.5 py-2.5 text-sm outline-none"
-          style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
-        />
-      </label>
+          <form onSubmit={(e) => { e.preventDefault(); save(false); }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
+              <InputLabel>
+                DISPLAY NAME
+                <InputField value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxWidth="320px" />
+              </InputLabel>
 
-      <div className="mt-8">
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-          CATEGORIES · TAP ★ TO SET YOUR FAVOURITE
-        </span>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {CATEGORIES.map((cat) => {
-            const active = categories.includes(cat);
-            return (
-              <div
-                key={cat}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm"
-                style={{
-                  border: `1px solid ${active ? "var(--ink)" : "var(--input-border)"}`,
-                  background: active ? "var(--navpill)" : "var(--surface-1)",
-                  color: active ? "var(--navpill-ink)" : "var(--ink)",
-                }}
-              >
-                <button type="button" onClick={() => toggleCategory(cat)} className="cursor-pointer">
-                  {categoryLabels[cat]}
-                </button>
-                {active && (
-                  <button
-                    type="button"
-                    onClick={() => toggleFavourite(cat)}
-                    className="cursor-pointer"
-                    title="Set as favourite"
-                    style={{ color: favourite === cat ? "var(--status-fading)" : "inherit", opacity: favourite === cat ? 1 : 0.5 }}
-                  >
-                    ★
-                  </button>
+              <div>
+                <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)", display: "block", marginBottom: "var(--space-md)" }}>
+                  CATEGORIES · TAP ★ TO SET YOUR FAVOURITE
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+                  {CATEGORIES.map((cat) => {
+                    const active = categories.includes(cat);
+                    return (
+                      <ChipButton
+                        key={cat}
+                        active={active}
+                        onClick={() => toggleCategory(cat)}
+                        dotColor="var(--status-fading)"
+                        dotActive={favourite === cat}
+                      >
+                        {categoryLabels[cat]}
+                      </ChipButton>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)", display: "block", marginBottom: "var(--space-md)" }}>
+                  COUNTRIES TO FOLLOW
+                </span>
+                <CountrySelect value={countries} onChange={setCountries} />
+              </div>
+
+              <div>
+                <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)", display: "block", marginBottom: "var(--space-md)" }}>
+                  HOW MUCH LEAN DO YOU WANT TO SEE
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-md)" }}>
+                  {biasOptions.map((opt) => (
+                    <OptionCard
+                      key={opt.value}
+                      active={biasPref === opt.value}
+                      onClick={() => setBiasPref(opt.value)}
+                      title={opt.label}
+                      description={opt.description}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ ...mono, fontSize: "var(--text-xs)", letterSpacing: "0.08em", color: "var(--color-muted)", display: "block", marginBottom: "var(--space-md)" }}>
+                  KEYWORDS TO FOLLOW · PRESS ENTER TO ADD
+                </span>
+                <InputField
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  onKeyDown={addKeyword}
+                  placeholder="e.g. artificial intelligence, climate"
+                />
+                {keywords.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)", marginTop: "var(--space-md)" }}>
+                    {keywords.map((kw) => (
+                      <KeywordChip key={kw} onRemove={() => setKeywords((prev) => prev.filter((k) => k !== kw))}>
+                        {kw}
+                      </KeywordChip>
+                    ))}
+                  </div>
                 )}
               </div>
-            );
-          })}
+
+              {error && (
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--bias-right)" }}>
+                  {error}
+                </p>
+              )}
+
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", marginTop: "var(--space-lg)" }}>
+                <PrimaryButton disabled={pending} onClick={() => save(false)}>
+                  {pending ? "Saving…" : "SAVE & CONTINUE"}
+                </PrimaryButton>
+                <SecondaryButton disabled={pending} onClick={() => save(true)}>
+                  Skip for now
+                </SecondaryButton>
+              </div>
+            </div>
+          </form>
         </div>
-      </div>
-
-      <div className="mt-8">
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-          COUNTRIES TO FOLLOW
-        </span>
-        <div className="mt-2.5">
-          <CountrySelect value={countries} onChange={setCountries} />
-        </div>
-      </div>
-
-      <div className="mt-8">
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>HOW MUCH LEAN DO YOU WANT TO SEE</span>
-        <div className="mt-2.5 grid gap-2.5 sm:grid-cols-3">
-          {biasOptions.map((opt) => (
-            <button
-              type="button"
-              key={opt.value}
-              onClick={() => setBiasPref(opt.value)}
-              className="cursor-pointer rounded-lg p-3.5 text-left"
-              style={{
-                border: `1.5px solid ${biasPref === opt.value ? "var(--ink)" : "var(--input-border)"}`,
-                background: "var(--surface-1)",
-              }}
-            >
-              <div style={{ ...mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "var(--ink)" }}>{opt.label}</div>
-              <div className="mt-1" style={{ fontSize: 12.5, lineHeight: 1.4, color: "var(--ink-muted)" }}>{opt.description}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-8">
-        <span style={{ ...mono, fontSize: 10.5, letterSpacing: "0.08em", color: "var(--ink-muted)" }}>
-          KEYWORDS TO FOLLOW · PRESS ENTER TO ADD
-        </span>
-        <input
-          value={keywordInput}
-          onChange={(e) => setKeywordInput(e.target.value)}
-          onKeyDown={addKeyword}
-          placeholder="e.g. artificial intelligence, climate"
-          className="mt-2.5 w-full rounded-lg px-3.5 py-2.5 text-sm outline-none"
-          style={{ border: "1px solid var(--input-border)", background: "var(--surface-1)", color: "var(--ink)" }}
-        />
-        {keywords.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {keywords.map((kw) => (
-              <span
-                key={kw}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-sm"
-                style={{ background: "var(--chip-center-bg)", color: "var(--chip-center-ink)" }}
-              >
-                {kw}
-                <button
-                  type="button"
-                  onClick={() => setKeywords((prev) => prev.filter((k) => k !== kw))}
-                  className="cursor-pointer"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <p className="mt-5 text-sm" style={{ color: "var(--bias-right)" }}>
-          {error}
-        </p>
-      )}
-
-      <div className="mt-9 flex items-center gap-3">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => save(false)}
-          className="rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
-          style={{ background: "var(--navpill)", color: "var(--navpill-ink)" }}
-        >
-          {pending ? "Saving…" : "Save & continue"}
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => save(true)}
-          className="text-sm font-medium underline"
-          style={{ color: "var(--ink-muted)" }}
-        >
-          Skip for now
-        </button>
-      </div>
+      </section>
     </div>
   );
 }
