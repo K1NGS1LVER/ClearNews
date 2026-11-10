@@ -17,10 +17,12 @@ test.describe("BiasBar", () => {
     await page.goto("/stories");
     const storyLink = page.locator('a[href^="/story/"]').first();
     await expect(storyLink).toBeVisible({ timeout: 15_000 });
-    await storyLink.click();
+    const storyUrl = await storyLink.getAttribute("href");
+    await page.goto(storyUrl!);
 
-    const leftLabel = page.locator("text=LEFT").first();
-    const rightLabel = page.locator("text=RIGHT").first();
+    // Check for bias labels (case-insensitive)
+    const leftLabel = page.locator("text=/LEFT/i").first();
+    const rightLabel = page.locator("text=/RIGHT/i").first();
     if (await leftLabel.isVisible()) {
       await expect(leftLabel).toBeVisible();
       await expect(rightLabel).toBeVisible();

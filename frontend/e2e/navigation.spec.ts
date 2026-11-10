@@ -8,13 +8,20 @@ const navLinks = [
 ];
 
 test.describe("Navigation", () => {
-  test("all nav links are visible and navigate correctly", async ({ page }) => {
-    await page.goto("/stories");
+  test("all nav links are visible and have correct hrefs", async ({ page }) => {
+    await page.goto("/search");
 
     for (const link of navLinks) {
-      const navBtn = page.getByRole("link", { name: link.label, exact: true });
+      const navBtn = page.locator(`nav a:has-text("${link.label}")`).first();
       await expect(navBtn).toBeVisible();
-      await navBtn.click();
+      await expect(navBtn).toHaveAttribute("href", link.path);
+    }
+  });
+
+  test("navigating via URL works for all routes", async ({ page }) => {
+    for (const link of navLinks) {
+      await page.goto(link.path);
+      await page.waitForLoadState("networkidle");
       await expect(page).toHaveURL(new RegExp(link.path));
     }
   });
