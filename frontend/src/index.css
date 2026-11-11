@@ -3,8 +3,8 @@
  * axes: light/grotesk-sans/chromatic-green · posture: committed · contrast: pass · fold: pass · v2.0.0 */
 /* Hallmark · pre-emit critique: P_ H_ E_ S_ R_ V_ · weakest: H, hero visual uses built sample until real capture */
 
-@import url("../../tokens.css");
-@import url("../../base.css");
+@import "../../tokens.css";
+@import "../../base.css";
 
 @import url("https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@700&family=Instrument+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap");
 @import "tailwindcss";

@@ -36,8 +36,6 @@ CLAUDE.md
 .opencode/
 
 # Hallmark generated files
-tokens.css
-base.css
 .hallmark/
 
 # Dev-only docs and assets - internal planning files, not for distribution
