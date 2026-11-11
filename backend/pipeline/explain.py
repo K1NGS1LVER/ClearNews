@@ -18,9 +18,9 @@ from app.models import Article, Story
 from pipeline.nlp import BIAS_LABELS, BIAS_MODEL, _bias_pipeline
 
 EXPLANATION_VERSION = 1
-MAX_EVALS = 400
+MAX_EVALS = 192
 BATCH_SIZE = 32
-ARTICLE_CAP = 5
+ARTICLE_CAP = 3
 
 # SHAP saturates the CPU on its own; one compute at a time also lets the
 # caller re-check the DB cache under the lock to dedupe concurrent requests.
