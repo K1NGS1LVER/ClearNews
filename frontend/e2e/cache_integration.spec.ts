@@ -10,9 +10,9 @@ test.describe("Tier 1 — Search result caching", () => {
     await expect(input).toBeVisible({ timeout: 15_000 });
 
     await input.fill("economy");
-    await expect(page.getByRole("button", { name: "Search" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Search", exact: true })).toBeEnabled();
 
-    await page.getByRole("button", { name: "Search" }).click({ force: true });
+    await page.getByRole("button", { name: "Search", exact: true }).click({ force: true });
 
     await expect(
       page.locator("text=MATCH").first().or(page.locator("text=No matches"))
@@ -26,11 +26,11 @@ test.describe("Tier 1 — Search result caching", () => {
     await expect(input).toBeVisible({ timeout: 15_000 });
 
     await input.fill("climate");
-    await page.getByRole("button", { name: "Search" }).click({ force: true });
+    await page.getByRole("button", { name: "Search", exact: true }).click({ force: true });
     await expect(page.locator("text=MATCH").first().or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
 
     await input.fill("trade");
-    await page.getByRole("button", { name: "Search" }).click({ force: true });
+    await page.getByRole("button", { name: "Search", exact: true }).click({ force: true });
     await expect(page.locator("text=MATCH").first().or(page.locator("text=No matches"))).toBeVisible({ timeout: 20_000 });
   });
 });
