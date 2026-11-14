@@ -21,6 +21,7 @@ function InputField({ value, onChange, ...props }: React.InputHTMLAttributes<HTM
     <input
       value={value}
       onChange={onChange}
+      {...props}
       style={{
         background: "var(--color-paper)",
         border: "1.5px solid var(--color-rule)",
@@ -29,7 +30,6 @@ function InputField({ value, onChange, ...props }: React.InputHTMLAttributes<HTM
         fontFamily: "var(--font-body)",
         color: "var(--color-ink)",
         padding: "var(--space-sm) var(--space-md)",
-        ...props,
       }}
       onFocus={(e) => { Object.assign(e.currentTarget.style, focusStyle); e.currentTarget.style.borderColor = "var(--color-ink)"; }}
       onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; e.currentTarget.style.borderColor = "var(--color-rule)"; }}
@@ -43,6 +43,7 @@ function PrimaryButton({ children, onClick, disabled, ...props }: React.ButtonHT
       type="button"
       onClick={onClick}
       disabled={disabled}
+      {...props}
       style={{
         ...mono,
         fontSize: "var(--text-sm)",
@@ -56,7 +57,6 @@ function PrimaryButton({ children, onClick, disabled, ...props }: React.ButtonHT
         opacity: disabled ? 0.4 : 1,
         transition: "transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out)",
         boxShadow: "inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-rule), 0 3px 0 var(--color-rule)",
-        ...props,
       }}
       onMouseDown={(e) => { if (!disabled) Object.assign(e.currentTarget.style, pressSpringStyle); }}
       onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
@@ -74,6 +74,7 @@ function LinkButton({ children, onClick, ...props }: React.ButtonHTMLAttributes<
     <button
       type="button"
       onClick={onClick}
+      {...props}
       style={{
         ...mono,
         fontSize: "var(--text-sm)",
@@ -85,7 +86,6 @@ function LinkButton({ children, onClick, ...props }: React.ButtonHTMLAttributes<
         textDecoration: "underline",
         textDecorationStyle: "dotted",
         transition: "color var(--dur-micro) var(--ease-out)",
-        ...props,
       }}
       onFocus={(e) => Object.assign(e.currentTarget.style, focusStyle)}
       onBlur={(e) => { e.currentTarget.style.outline = ""; e.currentTarget.style.outlineOffset = ""; }}
