@@ -21,7 +21,7 @@ test.describe("Navigation", () => {
   test("navigating via URL works for all routes", async ({ page }) => {
     for (const link of navLinks) {
       await page.goto(link.path);
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
       await expect(page).toHaveURL(new RegExp(link.path));
     }
   });

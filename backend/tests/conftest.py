@@ -12,8 +12,20 @@ from app.models import Story
 
 
 def _dev_db_has_stories() -> bool:
+    """Mirror /api/foryou's 14-day freshness window - an old backfill has
+    rows but no cards, so counting rows alone gives a false positive."""
+    from datetime import UTC, datetime, timedelta
+
+    cutoff = datetime.now(UTC) - timedelta(days=14)
     with SessionLocal() as db:
-        return db.execute(select(func.count()).select_from(Story)).scalar_one() > 0
+        return (
+            db.execute(
+                select(func.count())
+                .select_from(Story)
+                .where(Story.last_seen >= cutoff)
+            ).scalar_one()
+            > 0
+        )
 
 
 def pytest_collection_modifyitems(items):

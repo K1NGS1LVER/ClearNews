@@ -9,7 +9,7 @@ import type { FullConfig } from "@playwright/test";
 export default async function globalSetup(_config: FullConfig) {
   try {
     execSync(
-      `../backend/.venv/bin/python -c "import redis; r=redis.Redis(); keys=r.keys('ratelimit:*'); r.delete(*keys) if keys else None"`,
+      `../../backend/.venv/bin/python -c "import os, redis; from dotenv import load_dotenv; load_dotenv('../../backend/.env'); r=redis.from_url(os.environ['REDIS_URL']); keys=r.keys('ratelimit:*'); r.delete(*keys) if keys else None"`,
       { cwd: import.meta.dirname, timeout: 5_000, stdio: "pipe" },
     );
   } catch {
