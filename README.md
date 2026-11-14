@@ -1,23 +1,57 @@
+<div align="center">
+
 # ClearNews
 
-[![CI](https://github.com/K1NGS1LVER/ClearNews/actions/workflows/ci.yml/badge.svg)](https://github.com/K1NGS1LVER/ClearNews/actions/workflows/ci.yml)
+**A headline is one frame of a moving picture.**
 
-**Live:** https://clearnews-k1ngs1lvers-projects.vercel.app
+News story lifecycle, narrative drift, and measured political bias —
+built from [GDELT](https://www.gdeltproject.org/), refreshed every 15 minutes.
 
-**A headline is one frame of a moving picture.** News aggregators show today's
-articles with no memory of yesterday. ClearNews follows a story across its
-whole life instead: how coverage was born, how its political framing drifted
-left or right day by day, and when it quietly died — built from
-[GDELT](https://www.gdeltproject.org/), the largest open news dataset on
-earth, refreshed every 15 minutes.
+[![CI](https://img.shields.io/github/actions/workflow/status/K1NGS1LVER/ClearNews/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/K1NGS1LVER/ClearNews/actions/workflows/ci.yml)
+[![Live](https://img.shields.io/badge/live-clearnews-000000?style=flat-square&logo=vercel&logoColor=white)](https://clearnews-k1ngs1lvers-projects.vercel.app)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL_17-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![pgvector](https://img.shields.io/badge/pgvector-336791?style=flat-square&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite_8-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
+[![Playwright](https://img.shields.io/badge/Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://playwright.dev/)
+[![pytest](https://img.shields.io/badge/pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)](https://pytest.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
 
+[Live demo](https://clearnews-k1ngs1lvers-projects.vercel.app) ·
+[API docs](https://clearnews-api.onrender.com/docs) ·
+[Deploy guide](docs/DEPLOY.md) ·
+[Demo script](docs/DEMO.md)
+
+</div>
+
+News aggregators show today's articles with no memory of yesterday. ClearNews
+follows a story across its whole life instead: how coverage was born, how its
+political framing drifted left or right day by day, and when it quietly died.
 It also ships a RAG research agent that answers questions about the archive
 (and, optionally, the live web) with every claim resolving to a real,
 clickable citation.
 
 ![ClearNews landing page](docs/screenshots/landing.png)
 
-## What it tracks
+## Contents
+
+**Overview** — [Features](#features) · [Screenshots](#screenshots) ·
+[Architecture](#architecture) · [Tech stack](#tech-stack) ·
+[Pages & features](#pages--features) · [API reference](#api-reference)
+
+**Running it** — [Quickstart](#quickstart-docker) ·
+[Local development](#local-development) · [Configuration](#configuration) ·
+[Data pipeline](#data-pipeline)
+
+**Shipping** — [Tests](#tests) · [Deployment](#deploying-to-production) ·
+[Project layout](#project-layout)
+
+## Features
 
 - **Story lifecycle** — active / fading / dead status, first/last seen, a
   coverage-volume sparkline with a short-horizon forecast.
@@ -51,30 +85,20 @@ clickable citation.
 
 ## Architecture
 
-```
-GDELT GKG (every 15 min)
-        │
-        ▼
- pipeline.ingest ──► pipeline.fetch_content (httpx + trafilatura, parallel)
-        │
-        ▼
- pipeline.nlp   MiniLM embeddings · VADER sentiment · spaCy NER
-                politicalBiasBERT left/center/right
-        │
-        ▼
- pipeline.cluster (HDBSCAN)  ──►  pipeline.metrics (drift, death-risk)
-        │                                   │
-        └───────────────┬───────────────────┘
-                         ▼
-              PostgreSQL 17 + pgvector
-                         │
-                         ▼
-                     FastAPI  ──────────────►  React 19 UI (Vite)
-                         │
-                         ▼
-              LangGraph agent (Groq)
-               ├─ hybrid retrieval (vector + full-text, RRF-fused)
-               └─ optional live-web search ──► SearXNG (self-hosted)
+```mermaid
+flowchart TD
+    GDELT["GDELT GKG<br/>every 15 min"] --> ingest["pipeline.ingest"]
+    ingest --> fetch["pipeline.fetch_content<br/>httpx + trafilatura"]
+    fetch --> nlp["pipeline.nlp<br/>MiniLM · VADER · spaCy · bias BERT"]
+    nlp --> cluster["pipeline.cluster<br/>HDBSCAN"]
+    cluster --> metrics["pipeline.metrics<br/>drift · death-risk"]
+    metrics --> db[("PostgreSQL 17<br/>pgvector")]
+    db --> api["FastAPI"]
+    api --> ui["React 19 UI<br/>Vite"]
+    api --> agent["LangGraph agent<br/>Groq"]
+    db --> retrieval["Hybrid retrieval<br/>vector + full-text, RRF"]
+    retrieval --> agent
+    agent --> web["Live web search<br/>SearXNG / Tavily / Brave"]
 ```
 
 `pipeline.scheduler` runs the ingest → NLP → cluster → metrics chain
@@ -82,21 +106,19 @@ continuously (15-min ingest, hourly enrichment, nightly metrics/death-risk).
 Every stage is also idempotent and safe to run by hand — see
 [Data pipeline](#data-pipeline).
 
-## Stack
+## Tech stack
 
-- **Frontend** — React 19, Vite 8, Tailwind 4, Recharts, D3, React Query,
-  React Router, Playwright for e2e tests.
-- **Backend** — FastAPI, SQLAlchemy, Alembic migrations, PostgreSQL 17 with
-  the `pgvector` extension, Redis/Valkey for caching and rate limiting.
-- **NLP/ML** — sentence-transformers (MiniLM), VADER, spaCy, a fine-tuned
-  BERT bias classifier, HDBSCAN, UMAP, XGBoost, SHAP.
-- **Agent** — LangGraph + Groq (`meta-llama/llama-4-scout-17b-16e-instruct`),
-  hybrid (vector + Postgres full-text, RRF-fused) retrieval, optional
-  SearXNG/Tavily/Brave live-web search.
-- **Voice** — faster-whisper (STT), Kokoro (TTS), @ricky0123/vad-web
-  (browser-side voice activity detection).
-- **Auth** — cookie-based sessions, argon2 password hashing, Redis session
-  store.
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 19 · Vite 8 · Tailwind CSS 4 · React Router · React Query · Recharts · D3 |
+| **Backend** | FastAPI · SQLAlchemy 2 · Alembic · Pydantic · Uvicorn |
+| **Data** | PostgreSQL 17 · pgvector · Redis / Valkey |
+| **NLP / ML** | sentence-transformers (MiniLM) · VADER · spaCy · fine-tuned BERT bias classifier · HDBSCAN · UMAP · XGBoost · SHAP |
+| **Agent** | LangGraph · Groq (`meta-llama/llama-4-scout-17b-16e-instruct`) · RRF hybrid retrieval · SearXNG / Tavily / Brave |
+| **Voice** | faster-whisper (STT) · Kokoro (TTS) · @ricky0123/vad-web |
+| **Auth** | Cookie sessions · argon2 hashing · Redis session store |
+| **Testing** | pytest · Playwright · oxlint |
+| **Infrastructure** | Docker Compose · GitHub Actions · Vercel · Render · Supabase |
 
 ## Pages & features
 
@@ -323,7 +345,7 @@ instance. Docker Compose's `valkey` service does set a password (see
 `docker-compose.yml`); that's only relevant if you're running the Docker path.
 </details>
 
-## Docker
+## Quickstart (Docker)
 
 The simplest way to run the whole stack — Postgres, Valkey, the API, the
 scheduler, the frontend, and a self-hosted SearXNG instance for live-web
